@@ -7,9 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { mockRecipes } from '@/data/mock';
+import { useRecipes } from '@/context/recipes-context';
 
 export default function RecipesScreen() {
+  const { recipes } = useRecipes();
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -27,7 +28,7 @@ export default function RecipesScreen() {
             </Link>
           </ThemedView>
 
-          {mockRecipes.map((recipe) => (
+          {recipes.map((recipe) => (
             <Link key={recipe.id} href={`/recipes/${recipe.id}`} asChild>
               <Pressable style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="backgroundElement" style={styles.recipeCard}>

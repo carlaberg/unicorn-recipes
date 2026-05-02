@@ -9,15 +9,16 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { mockRecipes } from '@/data/mock';
+import { useRecipes } from '@/context/recipes-context';
 
 export default function RecipeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { recipes } = useRecipes();
 
-  const recipe = mockRecipes.find((r) => r.id === id);
+  const recipe = recipes.find((r) => r.id === id);
 
   return (
     <ThemedView style={styles.container}>

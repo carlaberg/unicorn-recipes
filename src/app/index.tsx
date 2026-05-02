@@ -7,10 +7,10 @@ import { AnimatedIcon } from '@/components/animated-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { mockUser } from '@/data/mock';
+import { useAuth } from '@/context/auth-context';
 
 export default function HomeScreen() {
-  const user = mockUser;
+  const { isLoggedIn, userName } = useAuth();
 
   return (
     <ThemedView style={styles.container}>
@@ -22,11 +22,11 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {user.isLoggedIn ? (
+        {isLoggedIn ? (
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.welcomeText}>
               Welcome back,{' '}
-              <ThemedText type="smallBold">{user.name}</ThemedText>!
+              <ThemedText type="smallBold">{userName}</ThemedText>!
             </ThemedText>
           </ThemedView>
         ) : (

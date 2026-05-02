@@ -8,11 +8,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useRecipes } from '@/context/recipes-context';
 
 export default function NewRecipeScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { addRecipe } = useRecipes();
 
   const [title, setTitle] = useState('');
   const [ingredients, setIngredients] = useState('');
@@ -22,6 +24,15 @@ export default function NewRecipeScreen() {
     if (!title.trim()) {
       return;
     }
+    addRecipe({
+      title: title.trim(),
+      image: require('@/assets/images/logo-glow.png'),
+      ingredients: ingredients
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+      instructions: instructions.trim(),
+    });
     router.back();
   }
 

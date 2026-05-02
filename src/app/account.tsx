@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { mockUser } from '@/data/mock';
+import { useAuth } from '@/context/auth-context';
 
 export default function AccountScreen() {
-  const [isLoggedIn, setIsLoggedIn] = useState(mockUser.isLoggedIn);
+  const { isLoggedIn, userName, userEmail, signIn, signOut } = useAuth();
 
   return (
     <ThemedView style={styles.container}>
@@ -20,14 +20,14 @@ export default function AccountScreen() {
             <ThemedView style={styles.row}>
               <ThemedText type="smallBold">Name</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {mockUser.name}
+                {userName}
               </ThemedText>
             </ThemedView>
 
             <ThemedView style={[styles.row, styles.rowBorder]}>
               <ThemedText type="smallBold">Email</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {mockUser.email}
+                {userEmail}
               </ThemedText>
             </ThemedView>
           </ThemedView>
@@ -38,10 +38,10 @@ export default function AccountScreen() {
             <ThemedView>
               <ThemedText type="small" themeColor="textSecondary" style={styles.authText}>
                 You are signed in as{' '}
-                <ThemedText type="smallBold">{mockUser.name}</ThemedText>
+                <ThemedText type="smallBold">{userName}</ThemedText>
               </ThemedText>
               <Pressable
-                onPress={() => setIsLoggedIn(false)}
+                onPress={signOut}
                 style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedText type="small" style={styles.authLink}>
                   Sign Out
@@ -51,14 +51,14 @@ export default function AccountScreen() {
           ) : (
             <ThemedView style={styles.authButtons}>
               <Pressable
-                onPress={() => setIsLoggedIn(true)}
+                onPress={signIn}
                 style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedText type="small" style={styles.authLink}>
                   Sign In
                 </ThemedText>
               </Pressable>
               <Pressable
-                onPress={() => setIsLoggedIn(true)}
+                onPress={signIn}
                 style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedText type="small" style={styles.authLink}>
                   Sign Up
