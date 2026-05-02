@@ -18,7 +18,7 @@ export function RecipesProvider({ children }: { children: React.ReactNode }) {
   function addRecipe(recipe: Omit<Recipe, 'id'>) {
     const newRecipe: Recipe = {
       ...recipe,
-      id: String(Date.now()),
+      id: Math.random().toString(36).slice(2),
     };
     setRecipes((prev) => [...prev, newRecipe]);
   }
