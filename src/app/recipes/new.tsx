@@ -19,6 +19,9 @@ export default function NewRecipeScreen() {
   const [instructions, setInstructions] = useState('');
 
   function handleSubmit() {
+    if (!title.trim()) {
+      return;
+    }
     router.back();
   }
 

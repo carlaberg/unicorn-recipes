@@ -17,7 +17,7 @@ export default function RecipesScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <ThemedView style={styles.header}>
-            <ThemedText type="subtitle">My Recipes</ThemedText>
+            <ThemedText type="subtitle">Recipes</ThemedText>
             <Link href="/recipes/new" asChild>
               <Pressable style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="backgroundElement" style={styles.addButton}>

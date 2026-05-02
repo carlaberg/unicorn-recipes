@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,48 +8,62 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { mockUser } from '@/data/mock';
 
 export default function AccountScreen() {
-  const user = mockUser;
+  const [isLoggedIn, setIsLoggedIn] = useState(mockUser.isLoggedIn);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedText type="subtitle">Account</ThemedText>
 
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedView style={styles.row}>
-            <ThemedText type="smallBold">Name</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {user.name}
-            </ThemedText>
-          </ThemedView>
+        {isLoggedIn && (
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedView style={styles.row}>
+              <ThemedText type="smallBold">Name</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {mockUser.name}
+              </ThemedText>
+            </ThemedView>
 
-          <ThemedView style={[styles.row, styles.rowBorder]}>
-            <ThemedText type="smallBold">Email</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {user.email}
-            </ThemedText>
+            <ThemedView style={[styles.row, styles.rowBorder]}>
+              <ThemedText type="smallBold">Email</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {mockUser.email}
+              </ThemedText>
+            </ThemedView>
           </ThemedView>
-        </ThemedView>
+        )}
 
         <ThemedView type="backgroundElement" style={[styles.card, styles.authCard]}>
-          {user.isLoggedIn ? (
+          {isLoggedIn ? (
             <ThemedView>
               <ThemedText type="small" themeColor="textSecondary" style={styles.authText}>
                 You are signed in as{' '}
-                <ThemedText type="smallBold">{user.name}</ThemedText>
+                <ThemedText type="smallBold">{mockUser.name}</ThemedText>
               </ThemedText>
-              <ThemedText type="small" style={styles.authLink}>
-                Sign Out
-              </ThemedText>
+              <Pressable
+                onPress={() => setIsLoggedIn(false)}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <ThemedText type="small" style={styles.authLink}>
+                  Sign Out
+                </ThemedText>
+              </Pressable>
             </ThemedView>
           ) : (
             <ThemedView style={styles.authButtons}>
-              <ThemedText type="small" style={styles.authLink}>
-                Sign In
-              </ThemedText>
-              <ThemedText type="small" style={styles.authLink}>
-                Sign Up
-              </ThemedText>
+              <Pressable
+                onPress={() => setIsLoggedIn(true)}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <ThemedText type="small" style={styles.authLink}>
+                  Sign In
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setIsLoggedIn(true)}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <ThemedText type="small" style={styles.authLink}>
+                  Sign Up
+                </ThemedText>
+              </Pressable>
             </ThemedView>
           )}
         </ThemedView>
@@ -99,5 +113,8 @@ const styles = StyleSheet.create({
   authButtons: {
     flexDirection: 'row',
     gap: Spacing.three,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
