@@ -1,6 +1,9 @@
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -59,6 +62,26 @@ export default function NewRecipeScreen() {
     );
   }
 
+  async function handlePickImage() {
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert("Permission required", "Please allow photo library access.");
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!pickerResult.canceled && pickerResult.assets.length > 0) {
+      setImage(pickerResult.assets[0].uri);
+    }
+  }
+
   return (
     <ThemedView style={styles.screen}>
       <KeyboardAvoidingView
@@ -106,23 +129,28 @@ export default function NewRecipeScreen() {
 
             <ThemedView style={styles.field}>
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Image URL
+                Recipe Image
               </ThemedText>
-              <TextInput
+              <Pressable
                 style={[
-                  styles.input,
+                  styles.imageButton,
                   {
                     backgroundColor: theme.backgroundElement,
-                    color: theme.text,
                   },
                 ]}
-                placeholder="https://..."
-                placeholderTextColor={theme.textSecondary}
-                value={image}
-                onChangeText={setImage}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
+                onPress={handlePickImage}
+              >
+                <ThemedText type="smallBold">
+                  {image ? "Change Image" : "Upload From Device"}
+                </ThemedText>
+              </Pressable>
+              {image ? (
+                <Image
+                  source={{ uri: image }}
+                  style={styles.imagePreview}
+                  contentFit="cover"
+                />
+              ) : null}
             </ThemedView>
 
             <ThemedView style={styles.field}>
@@ -299,6 +327,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     fontSize: 16,
+  },
+  imageButton: {
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    alignItems: "center",
+  },
+  imagePreview: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: Spacing.two,
   },
   multilineInput: {
     minHeight: 100,
