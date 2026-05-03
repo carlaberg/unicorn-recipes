@@ -10,6 +10,10 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { mockRecipes } from '@/data/mock-data';
 import { useTheme } from '@/hooks/use-theme';
 
+function formatIngredient(amount: number, unit: string, name: string) {
+  return `${amount} ${unit} ${name}`;
+}
+
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const recipe = mockRecipes.find((r) => r.id === id);
@@ -52,7 +56,9 @@ export default function RecipeDetailScreen() {
           </ThemedText>
           {recipe.ingredients.map((ingredient, index) => (
             <ThemedView key={index} style={styles.ingredientRow}>
-              <ThemedText type="small">• {ingredient}</ThemedText>
+              <ThemedText type="small">
+                • {formatIngredient(ingredient.amount, ingredient.unit, ingredient.name)}
+              </ThemedText>
             </ThemedView>
           ))}
 
