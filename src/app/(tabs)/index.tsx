@@ -28,7 +28,7 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {mockUser.isLoggedIn ? (
+        {isLoggedIn ? (
           <ThemedText type="subtitle" style={styles.welcomeText}>
             Welcome, {mockUser.name}!
           </ThemedText>
