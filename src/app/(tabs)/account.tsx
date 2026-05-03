@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { mockUser } from '@/data/mock-data';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AccountScreen() {
   const theme = useTheme();
-  const [isLoggedIn, setIsLoggedIn] = useState(mockUser.isLoggedIn);
+  const { isLoggedIn, setIsLoggedIn } = useAuth();
 
   return (
     <ThemedView style={styles.container}>
