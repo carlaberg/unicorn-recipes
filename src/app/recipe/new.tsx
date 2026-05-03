@@ -1,15 +1,16 @@
+import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -35,6 +36,11 @@ export default function NewRecipeScreen() {
 
   const canAddIngredient =
     ingredientName.trim().length > 0 && ingredientAmount.trim().length > 0;
+  const isFormValid =
+    title.trim().length > 0 &&
+    image.trim().length > 0 &&
+    ingredients.length > 0 &&
+    instructions.trim().length > 0;
 
   function handleAddIngredient() {
     const parsedAmount = Number.parseFloat(ingredientAmount);
@@ -108,7 +114,9 @@ export default function NewRecipeScreen() {
 
             <ThemedText type="subtitle">New Recipe</ThemedText>
 
-            <ThemedView style={styles.field}>
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
               <ThemedText type="smallBold" themeColor="textSecondary">
                 Title
               </ThemedText>
@@ -127,7 +135,9 @@ export default function NewRecipeScreen() {
               />
             </ThemedView>
 
-            <ThemedView style={styles.field}>
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
               <ThemedText type="smallBold" themeColor="textSecondary">
                 Recipe Image
               </ThemedText>
@@ -153,23 +163,12 @@ export default function NewRecipeScreen() {
               ) : null}
             </ThemedView>
 
-            <ThemedView style={styles.field}>
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
               <ThemedText type="smallBold" themeColor="textSecondary">
                 Add Ingredient
               </ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                    color: theme.text,
-                  },
-                ]}
-                placeholder="Ingredient name"
-                placeholderTextColor={theme.textSecondary}
-                value={ingredientName}
-                onChangeText={setIngredientName}
-              />
               <TextInput
                 style={[
                   styles.input,
@@ -184,28 +183,38 @@ export default function NewRecipeScreen() {
                 onChangeText={setIngredientAmount}
                 keyboardType="decimal-pad"
               />
-              <ThemedView style={styles.unitList}>
-                {ingredientUnits.map((unit) => {
-                  const isSelected = unit === ingredientUnit;
-
-                  return (
-                    <Pressable
-                      key={unit}
-                      style={[
-                        styles.unitChip,
-                        {
-                          backgroundColor: isSelected
-                            ? theme.backgroundSelected
-                            : theme.backgroundElement,
-                        },
-                      ]}
-                      onPress={() => setIngredientUnit(unit)}
-                    >
-                      <ThemedText type="small">{unit}</ThemedText>
-                    </Pressable>
-                  );
-                })}
+              <ThemedView
+                style={[
+                  styles.unitPickerContainer,
+                  { backgroundColor: theme.backgroundElement },
+                ]}
+              >
+                <Picker
+                  selectedValue={ingredientUnit}
+                  onValueChange={(value) =>
+                    setIngredientUnit(value as IngredientUnit)
+                  }
+                  dropdownIconColor={theme.text}
+                  style={[styles.unitPicker, { color: theme.text }]}
+                >
+                  {ingredientUnits.map((unit) => (
+                    <Picker.Item key={unit} label={unit} value={unit} />
+                  ))}
+                </Picker>
               </ThemedView>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    color: theme.text,
+                  },
+                ]}
+                placeholder="Ingredient name"
+                placeholderTextColor={theme.textSecondary}
+                value={ingredientName}
+                onChangeText={setIngredientName}
+              />
               <Pressable
                 style={[
                   styles.addIngredientButton,
@@ -222,7 +231,9 @@ export default function NewRecipeScreen() {
               </Pressable>
             </ThemedView>
 
-            <ThemedView style={styles.field}>
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
               <ThemedText type="smallBold" themeColor="textSecondary">
                 Ingredients
               </ThemedText>
@@ -256,7 +267,9 @@ export default function NewRecipeScreen() {
               </ThemedView>
             </ThemedView>
 
-            <ThemedView style={styles.field}>
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
               <ThemedText type="smallBold" themeColor="textSecondary">
                 Instructions
               </ThemedText>
@@ -281,8 +294,13 @@ export default function NewRecipeScreen() {
             <Pressable
               style={[
                 styles.submitButton,
-                { backgroundColor: theme.backgroundElement },
+                {
+                  backgroundColor: isFormValid
+                    ? "#FF8A00"
+                    : theme.backgroundElement,
+                },
               ]}
+              disabled={!isFormValid}
               onPress={() => router.back()}
             >
               <ThemedText type="smallBold">Save Recipe</ThemedText>
@@ -310,17 +328,19 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.six,
-    gap: Spacing.three,
+    gap: Spacing.four,
   },
   backButton: {
     alignSelf: "flex-start",
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
-    marginBottom: Spacing.two,
   },
   field: {
-    gap: Spacing.one,
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
   },
   input: {
     borderRadius: Spacing.two,
@@ -343,15 +363,12 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: "top",
   },
-  unitList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.one,
+  unitPickerContainer: {
+    borderRadius: Spacing.two,
+    overflow: "hidden",
   },
-  unitChip: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
+  unitPicker: {
+    marginVertical: -Spacing.one,
   },
   addIngredientButton: {
     alignItems: "center",
@@ -380,6 +397,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.three,
     borderRadius: Spacing.three,
-    marginTop: Spacing.two,
   },
 });
