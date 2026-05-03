@@ -1,21 +1,28 @@
-import { Image } from 'expo-image';
-import { Link, router } from 'expo-router';
-import React from 'react';
-import { FlatList, Pressable, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from "expo-image";
+import { router } from "expo-router";
+import React from "react";
+import { FlatList, Pressable, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { mockRecipes, Recipe } from '@/data/mock-data';
-import { useTheme } from '@/hooks/use-theme';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
+import { mockRecipes, Recipe } from "@/data/mock-data";
+import { useTheme } from "@/hooks/use-theme";
 
 function RecipeCard({ recipe }: { recipe: Recipe }) {
   const theme = useTheme();
   return (
-    <Pressable onPress={() => router.push(`/recipe/${recipe.id}`)}>
+    <Pressable
+      style={styles.cardPressable}
+      onPress={() => router.push(`/recipe/${recipe.id}`)}
+    >
       <ThemedView type="backgroundElement" style={styles.card}>
-        <Image source={{ uri: recipe.image }} style={styles.cardImage} contentFit="cover" />
+        <Image
+          source={{ uri: recipe.image }}
+          style={styles.cardImage}
+          contentFit="cover"
+        />
         <ThemedText type="small" style={styles.cardTitle}>
           {recipe.title}
         </ThemedText>
@@ -34,6 +41,7 @@ export default function RecipesScreen() {
         data={mockRecipes}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <RecipeCard recipe={item} />}
+        style={styles.list}
         contentContainerStyle={[
           styles.listContent,
           {
@@ -45,8 +53,12 @@ export default function RecipesScreen() {
           <ThemedView style={styles.header}>
             <ThemedText type="subtitle">My Recipes</ThemedText>
             <Pressable
-              style={[styles.addButton, { backgroundColor: theme.backgroundElement }]}
-              onPress={() => router.push('/recipe/new')}>
+              style={[
+                styles.addButton,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+              onPress={() => router.push("/recipe/new")}
+            >
               <ThemedText type="small">+ Add Recipe</ThemedText>
             </Pressable>
           </ThemedView>
@@ -60,18 +72,24 @@ export default function RecipesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  list: {
+    flex: 1,
+    width: "100%",
+    maxWidth: MaxContentWidth,
   },
   listContent: {
     paddingHorizontal: Spacing.four,
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
+  },
+  cardPressable: {
+    width: "100%",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: Spacing.four,
   },
   addButton: {
@@ -81,15 +99,15 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Spacing.three,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   cardImage: {
-    width: '100%',
+    width: "100%",
     aspectRatio: 16 / 9,
   },
   cardTitle: {
     padding: Spacing.three,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   separator: {
     height: Spacing.three,
