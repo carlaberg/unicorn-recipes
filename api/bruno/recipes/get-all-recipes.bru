@@ -1,0 +1,19 @@
+meta {
+  name: Get All Recipes
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/me/recipes
+  body: none
+  auth: none
+}
+
+headers {
+  x-user-id: {{userId}}
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3000
+}

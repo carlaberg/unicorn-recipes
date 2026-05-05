@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Recipe API",
   "scripts": {
-    "dev": "tsx src/server.ts",
+    "dev": "tsx --env-file .env src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node --env-file .env dist/server.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -21,6 +21,7 @@
     "@types/node": "^22.0.0",
     "msw": "^2.7.0",
     "prisma": "^6.0.0",
+    "prisma-zod-generator": "^2.1.4",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"

@@ -1,0 +1,42 @@
+meta {
+  name: Create Recipe
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/me/recipes/create
+  body: json
+  auth: none
+}
+
+headers {
+  x-user-id: {{userId}}
+}
+
+body:json {
+  {
+    "name": "Pancakes",
+    "ingredients": [
+      {
+        "name": "Flour",
+        "amount": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Milk",
+        "amount": 300,
+        "unit": "ml"
+      },
+      {
+        "name": "Egg",
+        "amount": 2,
+        "unit": "pcs"
+      }
+    ]
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3000
+}

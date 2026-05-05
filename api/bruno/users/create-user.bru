@@ -1,0 +1,23 @@
+meta {
+  name: Create User
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/users
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "carl@example.com",
+    "username": "carl",
+    "clerkId": "user_abc123"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3000
+}

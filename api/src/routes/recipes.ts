@@ -43,7 +43,7 @@ export async function recipeRoutes(app: FastifyInstance) {
       const recipe = await db.recipe.create({
         data: {
           name,
-          userId,
+          user: { connect: { id: userId } },
           ingredients: {
             create: ingredients.map((ing: (typeof ingredients)[number]) => ({
               amount: ing.amount,
