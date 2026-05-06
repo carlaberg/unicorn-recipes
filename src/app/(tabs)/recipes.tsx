@@ -1,30 +1,50 @@
-import { Image } from "expo-image";
-import { router } from "expo-router";
-import React from "react";
-import { FlatList, Pressable, StyleSheet } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
+import {
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Pressable,
+    StyleSheet,
+    View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
-import { mockRecipes, Recipe } from "@/data/mock-data";
+import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 
-function RecipeCard({ recipe }: { recipe: Recipe }) {
+function getRecipeImageUrl(url: string) {
+  const useImageProxy = process.env.EXPO_PUBLIC_USE_IMAGE_PROXY === "true";
+  if (!useImageProxy) {
+    return url;
+  }
+
+  const apiBaseUrl =
+    process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+  return `${apiBaseUrl}/me/recipes/assets/proxy?url=${encodeURIComponent(url)}`;
+}
+
+function RecipeCard({ recipe }: { recipe: ApiRecipe }) {
   const theme = useTheme();
+
   return (
     <Pressable
       style={styles.cardPressable}
       onPress={() => router.push(`/recipe/${recipe.id}`)}
     >
       <ThemedView type="backgroundElement" style={styles.card}>
-        <Image
-          source={{ uri: recipe.image }}
-          style={styles.cardImage}
-          contentFit="cover"
-        />
+        <View style={styles.cardImageContainer}>
+          <Image
+            source={{ uri: getRecipeImageUrl(recipe.image) }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+        </View>
         <ThemedText type="small" style={styles.cardTitle}>
-          {recipe.title}
+          {recipe.name}
         </ThemedText>
       </ThemedView>
     </Pressable>
@@ -34,12 +54,55 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
 export default function RecipesScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      async function fetchRecipes() {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const apiBaseUrl =
+            process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+          const response = await fetch(`${apiBaseUrl}/me/recipes`, {
+            headers: { "x-user-id": "1" },
+          });
+          if (!response.ok) {
+            throw new Error(`Failed to load recipes (${response.status})`);
+          }
+          const data = (await response.json()) as ApiRecipe[];
+          if (!cancelled) {
+            setRecipes(data);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(
+              err instanceof Error ? err.message : "Failed to load recipes",
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
+        }
+      }
+
+      fetchRecipes();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   return (
     <ThemedView style={styles.container}>
       <FlatList
-        data={mockRecipes}
-        keyExtractor={(item) => item.id}
+        data={recipes}
+        keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => <RecipeCard recipe={item} />}
         style={styles.list}
         contentContainerStyle={[
@@ -51,17 +114,30 @@ export default function RecipesScreen() {
         ]}
         ListHeaderComponent={
           <ThemedView style={styles.header}>
-            <ThemedText type="subtitle">My Recipes</ThemedText>
-            <Pressable
-              style={[
-                styles.addButton,
-                { backgroundColor: theme.backgroundElement },
-              ]}
-              onPress={() => router.push("/recipe/new")}
-            >
-              <ThemedText type="small">+ Add Recipe</ThemedText>
-            </Pressable>
+            <ThemedView style={styles.headerTopRow}>
+              <ThemedText type="subtitle">My Recipes</ThemedText>
+              <Pressable
+                style={[
+                  styles.addButton,
+                  { backgroundColor: theme.backgroundElement },
+                ]}
+                onPress={() => router.push("/recipe/new")}
+              >
+                <ThemedText type="small">+ Add Recipe</ThemedText>
+              </Pressable>
+            </ThemedView>
           </ThemedView>
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <ActivityIndicator color={theme.text} />
+          ) : error ? (
+            <ThemedText themeColor="textSecondary">{error}</ThemedText>
+          ) : (
+            <ThemedText themeColor="textSecondary">
+              No recipes yet. Add your first one!
+            </ThemedText>
+          )
         }
         ItemSeparatorComponent={() => <ThemedView style={styles.separator} />}
       />
@@ -87,10 +163,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   header: {
+    gap: Spacing.three,
+    marginBottom: Spacing.four,
+  },
+  headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: Spacing.four,
   },
   addButton: {
     paddingHorizontal: Spacing.three,
@@ -101,7 +180,7 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
     overflow: "hidden",
   },
-  cardImage: {
+  cardImageContainer: {
     width: "100%",
     aspectRatio: 16 / 9,
   },

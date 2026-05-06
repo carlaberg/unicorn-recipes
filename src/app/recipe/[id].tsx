@@ -1,14 +1,32 @@
-import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router, useLocalSearchParams } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Image,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { mockRecipes } from '@/data/mock-data';
-import { useTheme } from '@/hooks/use-theme';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { MaxContentWidth, Spacing } from "@/constants/theme";
+import { ApiRecipe } from "@/data/mock-data";
+import { useTheme } from "@/hooks/use-theme";
+
+function getRecipeImageUrl(url: string) {
+  const useImageProxy = process.env.EXPO_PUBLIC_USE_IMAGE_PROXY === "true";
+  if (!useImageProxy) {
+    return url;
+  }
+
+  const apiBaseUrl =
+    process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+  return `${apiBaseUrl}/me/recipes/assets/proxy?url=${encodeURIComponent(url)}`;
+}
 
 function formatIngredient(amount: number, unit: string, name: string) {
   return `${amount} ${unit} ${name}`;
@@ -16,14 +34,66 @@ function formatIngredient(amount: number, unit: string, name: string) {
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const recipe = mockRecipes.find((r) => r.id === id);
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const [recipe, setRecipe] = useState<ApiRecipe | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!recipe) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchRecipe() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const apiBaseUrl =
+          process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+        const response = await fetch(`${apiBaseUrl}/me/recipes/${id}`, {
+          headers: { "x-user-id": "1" },
+        });
+        if (!response.ok) {
+          throw new Error(`Recipe not found (${response.status})`);
+        }
+        const data = (await response.json()) as ApiRecipe;
+        if (!cancelled) {
+          setRecipe(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Failed to load recipe",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchRecipe();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const videoPlayer = useVideoPlayer(recipe?.video ?? null, (player) => {
+    player.loop = false;
+  });
+
+  if (isLoading) {
     return (
       <ThemedView style={styles.center}>
-        <ThemedText>Recipe not found.</ThemedText>
+        <ActivityIndicator color={theme.text} />
+      </ThemedView>
+    );
+  }
+
+  if (error || !recipe) {
+    return (
+      <ThemedView style={styles.center}>
+        <ThemedText>{error ?? "Recipe not found."}</ThemedText>
       </ThemedView>
     );
   }
@@ -35,37 +105,66 @@ export default function RecipeDetailScreen() {
         contentContainerStyle={[
           styles.content,
           { paddingBottom: insets.bottom + Spacing.six },
-        ]}>
+        ]}
+      >
         <ThemedView style={styles.inner}>
           <Pressable
-            style={[styles.backButton, { backgroundColor: theme.backgroundElement }]}
-            onPress={() => router.back()}>
+            style={[
+              styles.backButton,
+              { backgroundColor: theme.backgroundElement },
+            ]}
+            onPress={() => router.back()}
+          >
             <ThemedText type="small">← Back</ThemedText>
           </Pressable>
 
-          <ThemedText type="subtitle">{recipe.title}</ThemedText>
+          <ThemedText type="subtitle">{recipe.name}</ThemedText>
 
-          <Image
-            source={{ uri: recipe.image }}
-            style={styles.image}
-            contentFit="cover"
-          />
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: getRecipeImageUrl(recipe.image) }}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+            />
+          </View>
 
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+          <ThemedText
+            type="smallBold"
+            themeColor="textSecondary"
+            style={styles.sectionLabel}
+          >
             Ingredients
           </ThemedText>
-          {recipe.ingredients.map((ingredient, index) => (
+          {recipe.ingredients.map((item, index) => (
             <ThemedView key={index} style={styles.ingredientRow}>
               <ThemedText type="small">
-                • {formatIngredient(ingredient.amount, ingredient.unit, ingredient.name)}
+                •{" "}
+                {formatIngredient(item.amount, item.unit, item.ingredient.name)}
               </ThemedText>
             </ThemedView>
           ))}
 
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+          <ThemedText
+            type="smallBold"
+            themeColor="textSecondary"
+            style={styles.sectionLabel}
+          >
             Instructions
           </ThemedText>
           <ThemedText type="default">{recipe.instructions}</ThemedText>
+
+          {recipe.video ? (
+            <>
+              <ThemedText
+                type="smallBold"
+                themeColor="textSecondary"
+                style={styles.sectionLabel}
+              >
+                Video
+              </ThemedText>
+              <VideoView player={videoPlayer} style={styles.video} />
+            </>
+          ) : null}
         </ThemedView>
       </ScrollView>
     </ThemedView>
@@ -78,12 +177,12 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   content: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
   },
   inner: {
     flex: 1,
@@ -93,20 +192,26 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   backButton: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
     marginBottom: Spacing.two,
   },
-  image: {
-    width: '100%',
+  imageContainer: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: Spacing.three,
+    overflow: "hidden",
+  },
+  video: {
+    width: "100%",
     aspectRatio: 16 / 9,
     borderRadius: Spacing.three,
   },
   sectionLabel: {
     marginTop: Spacing.two,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 1,
   },
   ingredientRow: {

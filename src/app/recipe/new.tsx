@@ -2,6 +2,7 @@ import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useState } from "react";
 import {
   Alert,
@@ -26,6 +27,7 @@ export default function NewRecipeScreen() {
 
   const [title, setTitle] = useState("");
   const [image, setImage] = useState("");
+  const [video, setVideo] = useState("");
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientName, setIngredientName] = useState("");
   const [ingredientAmount, setIngredientAmount] = useState("");
@@ -33,6 +35,7 @@ export default function NewRecipeScreen() {
     ingredientUnits[0],
   );
   const [instructions, setInstructions] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canAddIngredient =
     ingredientName.trim().length > 0 && ingredientAmount.trim().length > 0;
@@ -41,6 +44,153 @@ export default function NewRecipeScreen() {
     image.trim().length > 0 &&
     ingredients.length > 0 &&
     instructions.trim().length > 0;
+
+  function getFileName(uri: string, fallbackExt: string) {
+    const uriParts = uri.split("/");
+    const lastPart = uriParts[uriParts.length - 1];
+    if (lastPart && lastPart.includes(".")) {
+      return lastPart;
+    }
+    return `upload-${Date.now()}.${fallbackExt}`;
+  }
+
+  function getMimeType(uri: string, mediaKind: "image" | "video") {
+    const lowerUri = uri.toLowerCase();
+    if (mediaKind === "image") {
+      if (lowerUri.endsWith(".png")) {
+        return "image/png";
+      }
+      if (lowerUri.endsWith(".webp")) {
+        return "image/webp";
+      }
+      return "image/jpeg";
+    }
+
+    if (lowerUri.endsWith(".mov")) {
+      return "video/quicktime";
+    }
+    if (lowerUri.endsWith(".m4v")) {
+      return "video/x-m4v";
+    }
+    return "video/mp4";
+  }
+
+  async function uploadToCloudinary(
+    uri: string,
+    resourceType: "image" | "video",
+  ) {
+    const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+    if (!cloudName || !uploadPreset) {
+      throw new Error(
+        "Missing Cloudinary env vars: EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET",
+      );
+    }
+
+    const formData = new FormData();
+    formData.append("upload_preset", uploadPreset);
+    formData.append("file", {
+      uri,
+      type: getMimeType(uri, resourceType),
+      name: getFileName(uri, resourceType === "image" ? "jpg" : "mp4"),
+    } as unknown as Blob);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+
+    const json = (await response.json()) as {
+      secure_url?: string;
+      error?: any;
+    };
+
+    if (!response.ok || !json.secure_url) {
+      const cloudinaryMessage =
+        typeof json.error?.message === "string"
+          ? json.error.message
+          : "Cloudinary upload failed";
+      throw new Error(cloudinaryMessage);
+    }
+
+    return json.secure_url;
+  }
+
+  async function handleSubmit() {
+    if (!isFormValid || isSubmitting) {
+      return;
+    }
+
+    const uploadedAssetUrls: string[] = [];
+    let recipeCreated = false;
+
+    try {
+      setIsSubmitting(true);
+
+      const imageUrl = await uploadToCloudinary(image, "image");
+      uploadedAssetUrls.push(imageUrl);
+
+      const videoUrl = video.trim()
+        ? await uploadToCloudinary(video, "video")
+        : undefined;
+      if (videoUrl) {
+        uploadedAssetUrls.push(videoUrl);
+      }
+
+      const apiBaseUrl =
+        process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+      const response = await fetch(`${apiBaseUrl}/me/recipes/create`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-user-id": "1",
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          image: imageUrl,
+          ...(videoUrl ? { video: videoUrl } : {}),
+          instructions: instructions.trim(),
+          ingredients,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to create recipe");
+      }
+
+      recipeCreated = true;
+
+      router.back();
+    } catch (error) {
+      const apiBaseUrl =
+        process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+      if (!recipeCreated && uploadedAssetUrls.length > 0) {
+        try {
+          await fetch(`${apiBaseUrl}/me/recipes/assets/cleanup`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-user-id": "1",
+            },
+            body: JSON.stringify({ urls: uploadedAssetUrls }),
+          });
+        } catch {
+          // Cleanup is best-effort; keep the original create error surfaced to the user.
+        }
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to save recipe";
+      Alert.alert("Save failed", message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   function handleAddIngredient() {
     const parsedAmount = Number.parseFloat(ingredientAmount);
@@ -85,6 +235,30 @@ export default function NewRecipeScreen() {
 
     if (!pickerResult.canceled && pickerResult.assets.length > 0) {
       setImage(pickerResult.assets[0].uri);
+    }
+  }
+
+  const videoPlayer = useVideoPlayer(video || null, (player) => {
+    player.loop = false;
+  });
+
+  async function handlePickVideo() {
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert("Permission required", "Please allow photo library access.");
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (!pickerResult.canceled && pickerResult.assets.length > 0) {
+      setVideo(pickerResult.assets[0].uri);
     }
   }
 
@@ -160,6 +334,30 @@ export default function NewRecipeScreen() {
                   style={styles.imagePreview}
                   contentFit="cover"
                 />
+              ) : null}
+            </ThemedView>
+
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
+              <ThemedText type="smallBold" themeColor="textSecondary">
+                Recipe Video (Optional)
+              </ThemedText>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                  },
+                ]}
+                onPress={handlePickVideo}
+              >
+                <ThemedText type="smallBold">
+                  {video ? "Change Video" : "Upload Video From Device"}
+                </ThemedText>
+              </Pressable>
+              {video ? (
+                <VideoView player={videoPlayer} style={styles.videoPreview} />
               ) : null}
             </ThemedView>
 
@@ -300,10 +498,12 @@ export default function NewRecipeScreen() {
                     : theme.backgroundElement,
                 },
               ]}
-              disabled={!isFormValid}
-              onPress={() => router.back()}
+              disabled={!isFormValid || isSubmitting}
+              onPress={handleSubmit}
             >
-              <ThemedText type="smallBold">Save Recipe</ThemedText>
+              <ThemedText type="smallBold">
+                {isSubmitting ? "Saving..." : "Save Recipe"}
+              </ThemedText>
             </Pressable>
           </ThemedView>
         </ScrollView>
@@ -355,6 +555,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   imagePreview: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: Spacing.two,
+  },
+  videoPreview: {
     width: "100%",
     aspectRatio: 16 / 9,
     borderRadius: Spacing.two,
