@@ -1,0 +1,38 @@
+meta {
+  name: Update Recipe
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/me/recipes/1
+  body: json
+  auth: none
+}
+
+headers {
+  x-user-id: {{userId}}
+}
+
+body:json {
+  {
+    "name": "Fluffy Pancakes",
+    "ingredients": [
+      {
+        "name": "Flour",
+        "amount": 250,
+        "unit": "g"
+      },
+      {
+        "name": "Milk",
+        "amount": 300,
+        "unit": "ml"
+      },
+      {
+        "name": "Egg",
+        "amount": 3,
+        "unit": "pcs"
+      }
+    ]
+  }
+}

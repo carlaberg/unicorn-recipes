@@ -1,0 +1,15 @@
+meta {
+  name: Delete Recipe
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/me/recipes/1
+  body: none
+  auth: none
+}
+
+headers {
+  x-user-id: {{userId}}
+}
