@@ -13,9 +13,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.5",
     "@fastify/sensible": "^6.0.0",
     "@prisma/client": "^6.0.0",
-    "fastify": "^5.0.0"
+    "fastify": "^5.0.0",
+    "fastify-raw-body": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

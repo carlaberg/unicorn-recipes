@@ -1,5 +1,6 @@
+import { useAuth } from "@clerk/clerk-expo";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -15,6 +16,7 @@ import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
+import { authorizedFetch } from "@/lib/api";
 
 function getRecipeImageUrl(url: string) {
   const useImageProxy = process.env.EXPO_PUBLIC_USE_IMAGE_PROXY === "true";
@@ -54,9 +56,15 @@ function RecipeCard({ recipe }: { recipe: ApiRecipe }) {
 export default function RecipesScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const getTokenRef = useRef(getToken);
   const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   useFocusEffect(
     useCallback(() => {
@@ -65,12 +73,18 @@ export default function RecipesScreen() {
       async function fetchRecipes() {
         setIsLoading(true);
         setError(null);
+
+        if (!isLoaded || !isSignedIn) {
+          setRecipes([]);
+          setIsLoading(false);
+          return;
+        }
+
         try {
-          const apiBaseUrl =
-            process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
-          const response = await fetch(`${apiBaseUrl}/me/recipes`, {
-            headers: { "x-user-id": "1" },
-          });
+          const response = await authorizedFetch(
+            "/me/recipes",
+            getTokenRef.current,
+          );
           if (!response.ok) {
             throw new Error(`Failed to load recipes (${response.status})`);
           }
@@ -95,7 +109,7 @@ export default function RecipesScreen() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [isLoaded, isSignedIn]),
   );
 
   return (

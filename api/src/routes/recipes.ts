@@ -228,7 +228,7 @@ async function fetchImageBufferWithCurl(url: string) {
 export async function recipeRoutes(app: FastifyInstance) {
   // GET /me/recipes
   app.get("/", async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = getUserIdFromRequest(
+    const userId = await getUserIdFromRequest(
       request.headers as Record<string, string | string[] | undefined>,
     );
     const recipes = await db.recipe.findMany({
@@ -245,7 +245,7 @@ export async function recipeRoutes(app: FastifyInstance) {
       request: FastifyRequest<{ Body: CreateRecipeBody }>,
       reply: FastifyReply,
     ) => {
-      const userId = getUserIdFromRequest(
+      const userId = await getUserIdFromRequest(
         request.headers as Record<string, string | string[] | undefined>,
       );
       const parsedBody = createRecipeBodySchema.safeParse(request.body);
@@ -301,7 +301,7 @@ export async function recipeRoutes(app: FastifyInstance) {
       reply: FastifyReply,
     ) => {
       // Ensure the request is authenticated similarly to recipe mutations.
-      getUserIdFromRequest(
+      await getUserIdFromRequest(
         request.headers as Record<string, string | string[] | undefined>,
       );
 
@@ -388,7 +388,7 @@ export async function recipeRoutes(app: FastifyInstance) {
       request: FastifyRequest<{ Params: RecipeParams }>,
       reply: FastifyReply,
     ) => {
-      const userId = getUserIdFromRequest(
+      const userId = await getUserIdFromRequest(
         request.headers as Record<string, string | string[] | undefined>,
       );
       const recipeId = parseInt(request.params.recipeId, 10);
@@ -413,7 +413,7 @@ export async function recipeRoutes(app: FastifyInstance) {
       request: FastifyRequest<{ Params: RecipeParams; Body: UpdateRecipeBody }>,
       reply: FastifyReply,
     ) => {
-      const userId = getUserIdFromRequest(
+      const userId = await getUserIdFromRequest(
         request.headers as Record<string, string | string[] | undefined>,
       );
       const recipeId = parseInt(request.params.recipeId, 10);
@@ -474,7 +474,7 @@ export async function recipeRoutes(app: FastifyInstance) {
       request: FastifyRequest<{ Params: RecipeParams }>,
       reply: FastifyReply,
     ) => {
-      const userId = getUserIdFromRequest(
+      const userId = await getUserIdFromRequest(
         request.headers as Record<string, string | string[] | undefined>,
       );
       const recipeId = parseInt(request.params.recipeId, 10);

@@ -1,6 +1,7 @@
+import { useAuth } from "@clerk/clerk-expo";
 import { router, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -16,6 +17,7 @@ import { ThemedView } from "@/components/themed-view";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
 import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
+import { authorizedFetch } from "@/lib/api";
 
 function getRecipeImageUrl(url: string) {
   const useImageProxy = process.env.EXPO_PUBLIC_USE_IMAGE_PROXY === "true";
@@ -36,9 +38,15 @@ export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const getTokenRef = useRef(getToken);
   const [recipe, setRecipe] = useState<ApiRecipe | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,12 +54,20 @@ export default function RecipeDetailScreen() {
     async function fetchRecipe() {
       setIsLoading(true);
       setError(null);
+
+      if (!isLoaded || !isSignedIn) {
+        if (!cancelled) {
+          setRecipe(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
-        const apiBaseUrl =
-          process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
-        const response = await fetch(`${apiBaseUrl}/me/recipes/${id}`, {
-          headers: { "x-user-id": "1" },
-        });
+        const response = await authorizedFetch(
+          `/me/recipes/${id}`,
+          getTokenRef.current,
+        );
         if (!response.ok) {
           throw new Error(`Recipe not found (${response.status})`);
         }
@@ -76,7 +92,7 @@ export default function RecipeDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, isLoaded, isSignedIn]);
 
   const videoPlayer = useVideoPlayer(recipe?.video ?? null, (player) => {
     player.loop = false;

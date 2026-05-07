@@ -1,3 +1,4 @@
+import { useAuth } from "@clerk/clerk-expo";
 import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -20,10 +21,12 @@ import { ThemedView } from "@/components/themed-view";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
 import { Ingredient, IngredientUnit, ingredientUnits } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
+import { authorizedFetch } from "@/lib/api";
 
 export default function NewRecipeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { getToken, isSignedIn } = useAuth();
 
   const [title, setTitle] = useState("");
   const [image, setImage] = useState("");
@@ -125,6 +128,14 @@ export default function NewRecipeScreen() {
       return;
     }
 
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in required",
+        "Please sign in before creating a recipe.",
+      );
+      return;
+    }
+
     const uploadedAssetUrls: string[] = [];
     let recipeCreated = false;
 
@@ -141,13 +152,10 @@ export default function NewRecipeScreen() {
         uploadedAssetUrls.push(videoUrl);
       }
 
-      const apiBaseUrl =
-        process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
-      const response = await fetch(`${apiBaseUrl}/me/recipes/create`, {
+      const response = await authorizedFetch("/me/recipes/create", getToken, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-user-id": "1",
         },
         body: JSON.stringify({
           title: title.trim(),
@@ -167,15 +175,12 @@ export default function NewRecipeScreen() {
 
       router.back();
     } catch (error) {
-      const apiBaseUrl =
-        process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
       if (!recipeCreated && uploadedAssetUrls.length > 0) {
         try {
-          await fetch(`${apiBaseUrl}/me/recipes/assets/cleanup`, {
+          await authorizedFetch("/me/recipes/assets/cleanup", getToken, {
             method: "POST",
             headers: {
               "content-type": "application/json",
-              "x-user-id": "1",
             },
             body: JSON.stringify({ urls: uploadedAssetUrls }),
           });

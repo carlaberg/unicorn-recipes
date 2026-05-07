@@ -1,56 +1,158 @@
-# Welcome to your Expo app 👋
+# Unicorn Recipes
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo + Fastify + Prisma app for creating and managing recipes.
 
-## Get started
+## Repository Layout
 
-1. Install dependencies
+- `src/`: Expo app (Clerk auth UI, recipe screens, tabs)
+- `api/src/`: Fastify API (auth, routes, Clerk webhook sync)
+- `api/prisma/`: Prisma schema and database configuration
 
-   ```bash
-   npm install
-   ```
+## Auth and User Sync Architecture
 
-2. Start the app
+Authentication and user data are split between Clerk and the local database:
 
-   ```bash
-   npx expo start
-   ```
+1. The app signs users in with Clerk.
+2. API requests include a Clerk session token.
+3. The API verifies that token and resolves the local user by `clerkId`.
+4. Local users are created/updated/deleted by Clerk webhook events.
 
-In the output, you'll find options to open the app in a
+Important behavior:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- The API does not auto-create users during normal requests.
+- If a Clerk user has not been synced yet, authenticated endpoints return an error like:
+  - `Authenticated user is not synced yet. Wait for Clerk webhook delivery and retry.`
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Environment Variables
 
-## Get a fresh project
+### App (`.env` at repo root)
 
-When you're ready, run:
+Required:
+
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_API_BASE_URL` (for simulator this is usually `http://localhost:3000`)
+
+### API (`api/.env`)
+
+Copy `api/.env.example` and fill in:
+
+- `DATABASE_URL`
+- `PORT` (default `3000`)
+- `CLERK_SECRET_KEY`
+- `CLERK_WEBHOOK_SIGNING_SECRET`
+
+The webhook signing secret must match the secret shown in Clerk for your webhook endpoint.
+
+## Local Development Workflow
+
+### 1. Install dependencies
+
+From repo root:
 
 ```bash
-npm run reset-project
+npm install
+cd api && npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Prepare database
 
-### Other setup steps
+```bash
+cd api
+npm run db:generate
+npm run db:push
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 3. Start API
 
-## Learn more
+```bash
+cd api
+npm run dev
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+API runs on `http://localhost:3000` by default.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 4. Start app
 
-## Join the community
+From repo root:
 
-Join our community of developers creating universal apps.
+```bash
+npm run ios
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+(or `npm run android` / `npm run web`)
+
+### 5. Expose local API for Clerk webhooks
+
+Use ngrok to expose port 3000:
+
+```bash
+ngrok http 3000
+```
+
+Copy the HTTPS forwarding URL (example: `https://your-subdomain.ngrok-free.app`).
+
+### 6. Configure Clerk webhook endpoint
+
+In Clerk Dashboard:
+
+- Add endpoint URL:
+  - `https://<your-ngrok-domain>/webhooks/clerk`
+- Enable events:
+  - `user.created`
+  - `user.updated`
+  - `user.deleted`
+- Copy the endpoint signing secret (`whsec_...`) into `api/.env` as `CLERK_WEBHOOK_SIGNING_SECRET`.
+
+If you update `api/.env`, restart API server.
+
+### 7. Validate delivery
+
+In Clerk webhook delivery logs:
+
+- Replay a `user.created` or `user.updated` event
+- Confirm HTTP `200` response from your local endpoint
+- Retry the app action (for example, loading recipes)
+
+## Troubleshooting
+
+### Symptom: auth works, but API says user is not synced
+
+Likely cause: webhook event has not been delivered or accepted.
+
+Check:
+
+1. ngrok tunnel is active and points to local port 3000.
+2. Clerk webhook URL matches your current ngrok URL exactly.
+3. `CLERK_WEBHOOK_SIGNING_SECRET` matches the Clerk endpoint secret.
+4. You are using the same Clerk environment/instance for:
+   - app publishable key
+   - API secret key
+   - webhook endpoint
+5. Clerk delivery logs show successful `2xx` response.
+
+### Symptom: webhook returns 400
+
+Likely cause: signature verification failed.
+
+Check:
+
+- Request includes `svix-id`, `svix-timestamp`, `svix-signature` headers.
+- Signing secret is correct and not from a different endpoint/environment.
+
+## Testing
+
+API tests:
+
+```bash
+cd api
+npm test
+```
+
+## Additional Docs
+
+- Webhook implementation details: `api/WEBHOOKS.md`
+
+## Notes
+
+- Webhook sync is the source of truth for local user records.
+- If you created users before adding webhooks, trigger `user.updated` in Clerk (or create a new user) to backfill local records.
