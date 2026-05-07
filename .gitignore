@@ -5,6 +5,7 @@ node_modules/
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
@@ -25,16 +26,28 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
 
 # macOS
 .DS_Store
 *.pem
 
 # local env files
+.env
+.env.*
 .env*.local
+api/.env
+!api/.env.example
 
 # typescript
 *.tsbuildinfo
+
+# tests
+coverage/
+
+# backend local database artifacts
+api/prisma/*.db
+api/prisma/*.db-journal
 
 app-example
 
