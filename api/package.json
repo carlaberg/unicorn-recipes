@@ -23,7 +23,7 @@
     "@types/node": "^22.0.0",
     "msw": "^2.7.0",
     "prisma": "^6.0.0",
-    "prisma-zod-generator": "^2.1.4",
+    "prisma-zod-generator": "^1.32.1",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"

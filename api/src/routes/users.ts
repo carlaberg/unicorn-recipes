@@ -1,13 +1,13 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { z } from "zod";
 import db from "../db";
-import {
-    UserCreateInputSchema,
-    UserUpdateInputSchema,
-} from "../prisma/generated/zod";
 
-type CreateUserBody = z.infer<typeof UserCreateInputSchema>;
-type UpdateUserBody = z.infer<typeof UserUpdateInputSchema>;
+type CreateUserBody = {
+  email: string;
+  username: string;
+  clerkId: string;
+};
+
+type UpdateUserBody = Partial<CreateUserBody>;
 
 interface UserParams {
   userId: string;
