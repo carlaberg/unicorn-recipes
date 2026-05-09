@@ -26,7 +26,11 @@ function getRecipeImageUrl(url: string) {
 
   const apiBaseUrl =
     process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
-  return `${apiBaseUrl}/me/recipes/assets/proxy?url=${encodeURIComponent(url)}`;
+  const imageProxyBaseUrl =
+    process.env.EXPO_PUBLIC_IMAGE_PROXY_BASE_URL ?? apiBaseUrl;
+  const normalizedBaseUrl = imageProxyBaseUrl.replace(/\/$/, "");
+
+  return `${normalizedBaseUrl}/me/recipes/assets/proxy?url=${encodeURIComponent(url)}`;
 }
 
 function RecipeCard({ recipe }: { recipe: ApiRecipe }) {

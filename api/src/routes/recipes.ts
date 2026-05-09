@@ -1,12 +1,8 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { promisify } from "node:util";
 import { z } from "zod";
 import db from "../db";
 import { getUserIdFromRequest } from "../utils/auth";
-
-const execFileAsync = promisify(execFile);
 
 const recipeIngredientInputSchema = z.object({
   name: z.string().trim().min(1),
@@ -198,31 +194,31 @@ function isAllowedCloudinaryUrl(url: string) {
   }
 }
 
-function inferImageContentType(url: string) {
-  const lowerUrl = url.toLowerCase();
-  if (lowerUrl.includes(".png")) {
-    return "image/png";
-  }
-  if (lowerUrl.includes(".webp")) {
-    return "image/webp";
-  }
-  if (lowerUrl.includes(".gif")) {
-    return "image/gif";
-  }
-  return "image/jpeg";
-}
-
-async function fetchImageBufferWithCurl(url: string) {
-  const { stdout } = await execFileAsync(
-    "curl",
-    ["-sSL", "--fail", "--max-time", "20", url],
-    {
-      encoding: "buffer",
-      maxBuffer: 20 * 1024 * 1024,
+async function fetchImageBuffer(url: string) {
+  const response = await fetch(url, {
+    redirect: "follow",
+    headers: {
+      accept: "image/avif,image/webp,image/*,*/*;q=0.8",
     },
-  );
+    signal: AbortSignal.timeout(20_000),
+  });
 
-  return Buffer.from(stdout as Buffer);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image (status ${response.status})`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const contentType =
+    response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
+
+  if (!contentType.startsWith("image/")) {
+    throw new Error(`Upstream returned non-image content-type: ${contentType}`);
+  }
+
+  return {
+    imageBuffer: Buffer.from(arrayBuffer),
+    contentType,
+  };
 }
 
 export async function recipeRoutes(app: FastifyInstance) {
@@ -365,15 +361,25 @@ export async function recipeRoutes(app: FastifyInstance) {
       }
 
       let imageBuffer: Buffer;
+      let contentType: string;
       try {
-        imageBuffer = await fetchImageBufferWithCurl(url);
-      } catch {
+        const fetchedAsset = await fetchImageBuffer(url);
+        imageBuffer = fetchedAsset.imageBuffer;
+        contentType = fetchedAsset.contentType;
+      } catch (error) {
+        request.log.error(
+          {
+            assetUrl: url,
+            reason: error instanceof Error ? error.message : String(error),
+            err: error,
+          },
+          "Asset proxy upstream fetch failed",
+        );
+
         return reply
           .status(502)
           .send({ message: "Failed to fetch remote asset" });
       }
-
-      const contentType = inferImageContentType(url);
 
       reply.header("content-type", contentType);
       reply.header("cache-control", "public, max-age=3600");

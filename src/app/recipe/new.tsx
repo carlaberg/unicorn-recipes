@@ -1,12 +1,12 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Picker } from "@react-native-picker/picker";
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -337,7 +337,7 @@ export default function NewRecipeScreen() {
                 <Image
                   source={{ uri: image }}
                   style={styles.imagePreview}
-                  contentFit="cover"
+                  resizeMode="cover"
                 />
               ) : null}
             </ThemedView>
