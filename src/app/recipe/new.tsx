@@ -1,5 +1,6 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Picker } from "@react-native-picker/picker";
+import TextRecognition from "@react-native-ml-kit/text-recognition";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -39,6 +40,7 @@ export default function NewRecipeScreen() {
   );
   const [instructions, setInstructions] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
 
   const canAddIngredient =
     ingredientName.trim().length > 0 && ingredientAmount.trim().length > 0;
@@ -197,6 +199,70 @@ export default function NewRecipeScreen() {
     }
   }
 
+  function parseScanRecipeResponse(value: unknown): {
+    title: string;
+    instructions: string;
+    ingredients: Ingredient[];
+  } | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const maybeRecipe = value as {
+      title?: unknown;
+      instructions?: unknown;
+      ingredients?: unknown;
+    };
+
+    if (
+      typeof maybeRecipe.title !== "string" ||
+      typeof maybeRecipe.instructions !== "string" ||
+      !Array.isArray(maybeRecipe.ingredients)
+    ) {
+      return null;
+    }
+
+    const parsedIngredients: Ingredient[] = [];
+    for (const ingredient of maybeRecipe.ingredients) {
+      if (!ingredient || typeof ingredient !== "object") {
+        return null;
+      }
+
+      const maybeIngredient = ingredient as {
+        name?: unknown;
+        amount?: unknown;
+        unit?: unknown;
+      };
+
+      const amount =
+        typeof maybeIngredient.amount === "number"
+          ? maybeIngredient.amount
+          : Number(maybeIngredient.amount);
+
+      if (
+        typeof maybeIngredient.name !== "string" ||
+        typeof maybeIngredient.unit !== "string" ||
+        !ingredientUnits.includes(maybeIngredient.unit as IngredientUnit) ||
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        return null;
+      }
+
+      parsedIngredients.push({
+        name: maybeIngredient.name.trim(),
+        amount,
+        unit: maybeIngredient.unit as IngredientUnit,
+      });
+    }
+
+    return {
+      title: maybeRecipe.title.trim(),
+      instructions: maybeRecipe.instructions.trim(),
+      ingredients: parsedIngredients,
+    };
+  }
+
   function handleAddIngredient() {
     const parsedAmount = Number.parseFloat(ingredientAmount);
 
@@ -240,6 +306,86 @@ export default function NewRecipeScreen() {
 
     if (!pickerResult.canceled && pickerResult.assets.length > 0) {
       setImage(pickerResult.assets[0].uri);
+    }
+  }
+
+  async function handleScanRecipe() {
+    if (isScanning) {
+      return;
+    }
+
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in required",
+        "Please sign in before scanning a recipe.",
+      );
+      return;
+    }
+
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert("Permission required", "Please allow camera access.");
+      return;
+    }
+
+    const cameraResult = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (cameraResult.canceled || cameraResult.assets.length === 0) {
+      return;
+    }
+
+    const capturedImageUri = cameraResult.assets[0].uri;
+
+    try {
+      setIsScanning(true);
+
+      const ocrResult = await TextRecognition.recognize(capturedImageUri);
+      const rawText = ocrResult.text?.trim() ?? "";
+
+      if (!rawText) {
+        Alert.alert("Scan failed", "No readable text was found in the photo.");
+        return;
+      }
+
+      const response = await authorizedFetch("/me/recipes/scan", getToken, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ rawText }),
+      });
+
+      if (!response.ok) {
+        const fallback =
+          response.status === 422
+            ? "Could not parse a complete recipe. Try a clearer photo."
+            : "Recipe scan failed";
+        const errorText = await response.text();
+        throw new Error(errorText || fallback);
+      }
+
+      const json = (await response.json()) as unknown;
+      const parsedRecipe = parseScanRecipeResponse(json);
+
+      if (!parsedRecipe) {
+        throw new Error("Received invalid scan data from the server.");
+      }
+
+      setTitle(parsedRecipe.title);
+      setInstructions(parsedRecipe.instructions);
+      setIngredients(parsedRecipe.ingredients);
+      setImage(capturedImageUri);
+      setVideo("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to scan recipe";
+      Alert.alert("Scan failed", message);
+    } finally {
+      setIsScanning(false);
     }
   }
 
@@ -331,6 +477,20 @@ export default function NewRecipeScreen() {
               >
                 <ThemedText type="smallBold">
                   {image ? "Change Image" : "Upload From Device"}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                  },
+                ]}
+                onPress={handleScanRecipe}
+                disabled={isScanning}
+              >
+                <ThemedText type="smallBold">
+                  {isScanning ? "Scanning..." : "Scan Recipe"}
                 </ThemedText>
               </Pressable>
               {image ? (

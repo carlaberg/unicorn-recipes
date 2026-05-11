@@ -7,6 +7,7 @@ const envSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
+  GEMINI_API_KEY: z.string().trim().min(1).optional(),
   CLOUDINARY_CLOUD_NAME: z.string().trim().min(1).optional(),
   CLOUDINARY_API_KEY: z.string().trim().min(1).optional(),
   CLOUDINARY_API_SECRET: z.string().trim().min(1).optional(),
