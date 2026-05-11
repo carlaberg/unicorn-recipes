@@ -28,6 +28,11 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [isPendingVerification, setIsPendingVerification] = useState(false);
+  const [isPendingSecondFactor, setIsPendingSecondFactor] = useState(false);
+  const [secondFactorCode, setSecondFactorCode] = useState("");
+  const [secondFactorStrategy, setSecondFactorStrategy] = useState<
+    string | null
+  >(null);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -82,8 +87,28 @@ export default function AuthScreen() {
           password,
         });
 
+        if (result.status === "needs_second_factor") {
+          const firstStrategy = result.supportedSecondFactors?.[0]?.strategy;
+          if (firstStrategy) {
+            if (firstStrategy === "email_code") {
+              await signIn.prepareSecondFactor({ strategy: "email_code" });
+            }
+            setSecondFactorStrategy(firstStrategy);
+            setIsPendingSecondFactor(true);
+            Alert.alert(
+              "Two-Factor Authentication",
+              `Please enter your ${firstStrategy} code.`,
+            );
+            return;
+          } else {
+            throw new Error("No second factor methods available.");
+          }
+        }
+
         if (result.status !== "complete" || !result.createdSessionId) {
-          throw new Error("Sign-in could not be completed.");
+          throw new Error(
+            `Sign-in incomplete: status=${result.status}, sessionId=${result.createdSessionId}`,
+          );
         }
 
         await setSignInActive?.({ session: result.createdSessionId });
@@ -91,8 +116,12 @@ export default function AuthScreen() {
 
       setPassword("");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Authentication failed";
+      let message = "Authentication failed";
+      if (error instanceof Error) {
+        message = error.message;
+      } else if (typeof error === "object" && error !== null) {
+        message = (error as any).message || JSON.stringify(error);
+      }
       Alert.alert("Authentication failed", message);
     } finally {
       setIsSubmitting(false);
@@ -129,8 +158,55 @@ export default function AuthScreen() {
       setPassword("");
       setIsPendingVerification(false);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Verification failed";
+      let message = "Verification failed";
+      if (error instanceof Error) {
+        message = error.message;
+      } else if (typeof error === "object" && error !== null) {
+        message = (error as any).message || JSON.stringify(error);
+      }
+      Alert.alert("Verification failed", message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleVerifySecondFactor() {
+    if (!secondFactorCode.trim()) {
+      Alert.alert("Missing code", "Please enter your verification code.");
+      return;
+    }
+
+    if (!isSignInLoaded || !signIn) {
+      Alert.alert("Not ready", "Sign in is not ready yet.");
+      return;
+    }
+
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const result = await signIn.attemptSecondFactor({
+        strategy: secondFactorStrategy as any,
+        code: secondFactorCode.trim(),
+      });
+
+      if (result.status !== "complete" || !result.createdSessionId) {
+        throw new Error("Second factor verification was not completed.");
+      }
+
+      await setSignInActive?.({ session: result.createdSessionId });
+      setSecondFactorCode("");
+      setSecondFactorStrategy(null);
+      setIsPendingSecondFactor(false);
+    } catch (error) {
+      let message = "Verification failed";
+      if (error instanceof Error) {
+        message = error.message;
+      } else if (typeof error === "object" && error !== null) {
+        message = (error as any).message || JSON.stringify(error);
+      }
       Alert.alert("Verification failed", message);
     } finally {
       setIsSubmitting(false);
@@ -187,7 +263,7 @@ export default function AuthScreen() {
           />
         )}
 
-        {!isPendingVerification ? (
+        {!isPendingVerification && !isPendingSecondFactor ? (
           <TextInput
             style={[
               styles.input,
@@ -203,7 +279,7 @@ export default function AuthScreen() {
             value={password}
             onChangeText={setPassword}
           />
-        ) : (
+        ) : isPendingVerification ? (
           <TextInput
             style={[
               styles.input,
@@ -219,20 +295,44 @@ export default function AuthScreen() {
             value={verificationCode}
             onChangeText={setVerificationCode}
           />
+        ) : (
+          <TextInput
+            style={[
+              styles.input,
+              {
+                borderColor: theme.backgroundSelected,
+                color: theme.text,
+                backgroundColor: theme.backgroundElement,
+              },
+            ]}
+            placeholder={`${secondFactorStrategy} code`}
+            placeholderTextColor={theme.textSecondary}
+            keyboardType="number-pad"
+            value={secondFactorCode}
+            onChangeText={setSecondFactorCode}
+          />
         )}
 
         <Pressable
           style={[styles.button, { backgroundColor: theme.backgroundElement }]}
-          onPress={isPendingVerification ? handleVerifyEmailCode : handleSubmit}
+          onPress={
+            isPendingSecondFactor
+              ? handleVerifySecondFactor
+              : isPendingVerification
+                ? handleVerifyEmailCode
+                : handleSubmit
+          }
         >
           <ThemedText type="small">
             {isSubmitting
               ? "Please wait..."
-              : isPendingVerification
-                ? "Verify Email"
-                : isSignUpMode
-                  ? "Create Account"
-                  : "Log In"}
+              : isPendingSecondFactor
+                ? "Verify 2FA Code"
+                : isPendingVerification
+                  ? "Verify Email"
+                  : isSignUpMode
+                    ? "Create Account"
+                    : "Log In"}
           </ThemedText>
         </Pressable>
 
@@ -242,6 +342,9 @@ export default function AuthScreen() {
             setIsPendingVerification(false);
             setVerificationCode("");
             setUsername("");
+            setIsPendingSecondFactor(false);
+            setSecondFactorCode("");
+            setSecondFactorStrategy(null);
           }}
         >
           <ThemedText type="small" themeColor="textSecondary">
