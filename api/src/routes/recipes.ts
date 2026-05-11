@@ -410,11 +410,12 @@ export async function recipeRoutes(app: FastifyInstance) {
 
       try {
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(config.GEMINI_API_KEY)}`,
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
           {
             method: "POST",
             headers: {
               "content-type": "application/json",
+              "x-goog-api-key": config.GEMINI_API_KEY,
             },
             body: JSON.stringify({
               contents: [
@@ -457,7 +458,13 @@ export async function recipeRoutes(app: FastifyInstance) {
         try {
           const scanResult = extractStructuredRecipe(parsedGeminiResponse.data);
           return reply.status(200).send(scanResult);
-        } catch {
+        } catch (error) {
+          request.log.warn(
+            {
+              reason: error instanceof Error ? error.message : String(error),
+            },
+            "Gemini response failed recipe schema validation",
+          );
           return reply.status(422).send({
             message: "Could not parse recipe from OCR text",
           });
