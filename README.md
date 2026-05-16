@@ -40,6 +40,7 @@ Copy `api/.env.example` and fill in:
 - `PORT` (default `3000`)
 - `CLERK_SECRET_KEY`
 - `CLERK_WEBHOOK_SIGNING_SECRET`
+- `GEMINI_API_KEY` (required for recipe scan endpoint)
 
 The webhook signing secret must match the secret shown in Clerk for your webhook endpoint.
 

@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { config } from "../config";
 import db from "../db";
 import { getUserIdFromRequest } from "../utils/auth";
 
@@ -38,6 +39,36 @@ const cleanupAssetsBodySchema = z.object({
 
 type CleanupAssetsBody = z.infer<typeof cleanupAssetsBodySchema>;
 
+const scanRecipeBodySchema = z.object({
+  rawText: z.string().trim().min(1),
+});
+
+const allowedIngredientUnits = [
+  "cups",
+  "tbsp",
+  "tsp",
+  "g",
+  "kg",
+  "ml",
+  "l",
+  "pieces",
+  "pinches",
+] as const;
+
+const scanRecipeResponseSchema = z.object({
+  title: z.string().trim().min(1),
+  instructions: z.string().trim().min(1),
+  ingredients: z.array(
+    z.object({
+      name: z.string().trim().min(1),
+      amount: z.coerce.number().positive(),
+      unit: z.enum(allowedIngredientUnits),
+    }),
+  ),
+});
+
+type ScanRecipeBody = z.infer<typeof scanRecipeBodySchema>;
+
 const proxyAssetQuerySchema = z.object({
   url: z.string().trim().url(),
 });
@@ -46,6 +77,69 @@ type ProxyAssetQuery = z.infer<typeof proxyAssetQuerySchema>;
 
 interface RecipeParams {
   recipeId: string;
+}
+
+const geminiGenerateContentSchema = z.object({
+  candidates: z
+    .array(
+      z.object({
+        content: z.object({
+          parts: z.array(
+            z.object({
+              text: z.string(),
+            }),
+          ),
+        }),
+      }),
+    )
+    .min(1),
+});
+
+function stripCodeFences(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("```")) {
+    return trimmed;
+  }
+  return trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+}
+
+function extractStructuredRecipe(
+  geminiResponse: z.infer<typeof geminiGenerateContentSchema>,
+) {
+  const text = geminiResponse.candidates
+    .flatMap((candidate) => candidate.content.parts)
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+
+  if (!text) {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  const parsedJson = JSON.parse(stripCodeFences(text));
+  const parsedRecipe = scanRecipeResponseSchema.safeParse(parsedJson);
+  if (!parsedRecipe.success) {
+    throw new Error("Gemini response did not match recipe schema");
+  }
+
+  return parsedRecipe.data;
+}
+
+function buildScanPrompt(rawText: string) {
+  const units = allowedIngredientUnits.join(" | ");
+  return [
+    "Extract recipe data from OCR text.",
+    "Return only valid minified JSON with this exact shape:",
+    '{"title":"string","instructions":"string","ingredients":[{"name":"string","amount":1.5,"unit":"cups"}]}',
+    `Allowed ingredient units: ${units}.`,
+    "Do not include markdown, comments, or extra keys.",
+    "If data is missing, use empty strings and an empty ingredients array.",
+    "OCR text:",
+    rawText,
+  ].join("\n");
 }
 
 function getCloudinaryAssetDetails(assetUrl: string) {
@@ -286,6 +380,112 @@ export async function recipeRoutes(app: FastifyInstance) {
       });
 
       return reply.status(201).send(recipe);
+    },
+  );
+
+  // POST /me/recipes/scan
+  app.post<{ Body: ScanRecipeBody }>(
+    "/scan",
+    async (
+      request: FastifyRequest<{ Body: ScanRecipeBody }>,
+      reply: FastifyReply,
+    ) => {
+      await getUserIdFromRequest(
+        request.headers as Record<string, string | string[] | undefined>,
+      );
+
+      const parsedBody = scanRecipeBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.status(400).send({
+          message: "Invalid request body",
+          errors: parsedBody.error.flatten(),
+        });
+      }
+
+      if (!config.GEMINI_API_KEY) {
+        return reply.status(503).send({
+          message: "Recipe scan is not configured",
+        });
+      }
+
+      try {
+        const prompt = buildScanPrompt(parsedBody.data.rawText);
+        request.log.info(
+          { rawTextLength: parsedBody.data.rawText.length },
+          "[Gemini] OCR input received",
+        );
+        request.log.info(
+          { prompt },
+          "[Gemini] Full prompt being sent to model",
+        );
+
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": config.GEMINI_API_KEY,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [{ text: prompt }],
+                },
+              ],
+              generationConfig: {
+                responseMimeType: "application/json",
+              },
+            }),
+            signal: AbortSignal.timeout(20_000),
+          },
+        );
+
+        if (!response.ok) {
+          request.log.error(
+            {
+              status: response.status,
+              body: await response.text().catch(() => ""),
+            },
+            "Gemini scan request failed",
+          );
+          return reply.status(502).send({ message: "Failed to scan recipe" });
+        }
+
+        const responseJson = await response.json();
+        const parsedGeminiResponse =
+          geminiGenerateContentSchema.safeParse(responseJson);
+        if (!parsedGeminiResponse.success) {
+          request.log.error(
+            { errors: parsedGeminiResponse.error.flatten() },
+            "Gemini response did not include candidates",
+          );
+          return reply
+            .status(502)
+            .send({ message: "Failed to parse scan response" });
+        }
+
+        try {
+          const scanResult = extractStructuredRecipe(parsedGeminiResponse.data);
+          return reply.status(200).send(scanResult);
+        } catch (error) {
+          request.log.warn(
+            {
+              reason: error instanceof Error ? error.message : String(error),
+            },
+            "Gemini response failed recipe schema validation",
+          );
+          return reply.status(422).send({
+            message: "Could not parse recipe from OCR text",
+          });
+        }
+      } catch (error) {
+        request.log.error(
+          { reason: error instanceof Error ? error.message : String(error) },
+          "Recipe scan failed",
+        );
+        return reply.status(502).send({ message: "Failed to scan recipe" });
+      }
     },
   );
 
