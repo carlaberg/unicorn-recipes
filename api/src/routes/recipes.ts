@@ -25,10 +25,28 @@ const createRecipeBodySchema = z
     path: ["title"],
   });
 
-const updateRecipeBodySchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  ingredients: z.array(recipeIngredientInputSchema).optional(),
-});
+const updateRecipeBodySchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).optional(),
+    image: z.string().trim().url().optional(),
+    video: z.string().trim().url().nullable().optional(),
+    instructions: z.string().trim().min(1).optional(),
+    ingredients: z.array(recipeIngredientInputSchema).optional(),
+  })
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.title !== undefined ||
+      value.image !== undefined ||
+      value.video !== undefined ||
+      value.instructions !== undefined ||
+      value.ingredients !== undefined,
+    {
+      message: "At least one field is required",
+      path: ["name"],
+    },
+  );
 
 type CreateRecipeBody = z.infer<typeof createRecipeBodySchema>;
 type UpdateRecipeBody = z.infer<typeof updateRecipeBodySchema>;
@@ -142,8 +160,22 @@ function buildScanPrompt(rawText: string) {
   ].join("\n");
 }
 
+function getCloudinaryCleanupConfig() {
+  const cloudName =
+    process.env.CLOUDINARY_CLOUD_NAME ??
+    process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  return {
+    cloudName,
+    apiKey,
+    apiSecret,
+  };
+}
+
 function getCloudinaryAssetDetails(assetUrl: string) {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const { cloudName } = getCloudinaryCleanupConfig();
 
   if (!cloudName) {
     return null;
@@ -207,17 +239,25 @@ function signCloudinaryDestroyRequest(
   timestamp: number,
   apiSecret: string,
 ) {
-  const toSign = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+  const toSign = `invalidate=true&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
   return createHash("sha1").update(toSign).digest("hex");
 }
 
 async function deleteCloudinaryAssetByUrl(url: string) {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const { cloudName, apiKey, apiSecret } = getCloudinaryCleanupConfig();
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Cloudinary cleanup is not configured on the API server");
+    const missingVars = [
+      !cloudName
+        ? "CLOUDINARY_CLOUD_NAME or EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME"
+        : null,
+      !apiKey ? "CLOUDINARY_API_KEY" : null,
+      !apiSecret ? "CLOUDINARY_API_SECRET" : null,
+    ].filter(Boolean);
+
+    throw new Error(
+      `Cloudinary cleanup is not configured on the API server. Missing: ${missingVars.join(", ")}`,
+    );
   }
 
   const details = getCloudinaryAssetDetails(url);
@@ -528,6 +568,7 @@ export async function recipeRoutes(app: FastifyInstance) {
         }));
 
       if (failed.length > 0) {
+        request.log.error({ failed }, "Cloudinary asset cleanup failed");
         return reply.status(502).send({
           message: "Failed to clean up some Cloudinary assets",
           failed,
@@ -641,7 +682,9 @@ export async function recipeRoutes(app: FastifyInstance) {
         });
       }
 
-      const { name, ingredients } = parsedBody.data;
+      const { name, title, image, video, instructions, ingredients } =
+        parsedBody.data;
+      const nextName = title ?? name;
 
       if (ingredients !== undefined) {
         await db.recipeIngredient.deleteMany({ where: { recipeId } });
@@ -650,7 +693,10 @@ export async function recipeRoutes(app: FastifyInstance) {
       const recipe = await db.recipe.update({
         where: { id: recipeId },
         data: {
-          ...(name !== undefined && { name }),
+          ...(nextName !== undefined && { name: nextName }),
+          ...(image !== undefined && { image }),
+          ...(video !== undefined && { video }),
+          ...(instructions !== undefined && { instructions }),
           ...(ingredients !== undefined && {
             ingredients: {
               create: ingredients.map((ing: (typeof ingredients)[number]) => ({

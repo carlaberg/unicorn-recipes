@@ -1,7 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -52,51 +52,53 @@ export default function RecipeDetailScreen() {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  useEffect(() => {
-    let cancelled = false;
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-    async function fetchRecipe() {
-      setIsLoading(true);
-      setError(null);
+      async function fetchRecipe() {
+        setIsLoading(true);
+        setError(null);
 
-      if (!isLoaded || !isSignedIn) {
-        if (!cancelled) {
-          setRecipe(null);
-          setIsLoading(false);
+        if (!isLoaded || !isSignedIn) {
+          if (!cancelled) {
+            setRecipe(null);
+            setIsLoading(false);
+          }
+          return;
         }
-        return;
-      }
 
-      try {
-        const response = await authorizedFetch(
-          `/me/recipes/${id}`,
-          getTokenRef.current,
-        );
-        if (!response.ok) {
-          throw new Error(`Recipe not found (${response.status})`);
-        }
-        const data = (await response.json()) as ApiRecipe;
-        if (!cancelled) {
-          setRecipe(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load recipe",
+        try {
+          const response = await authorizedFetch(
+            `/me/recipes/${id}`,
+            getTokenRef.current,
           );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
+          if (!response.ok) {
+            throw new Error(`Recipe not found (${response.status})`);
+          }
+          const data = (await response.json()) as ApiRecipe;
+          if (!cancelled) {
+            setRecipe(data);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(
+              err instanceof Error ? err.message : "Failed to load recipe",
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
         }
       }
-    }
 
-    fetchRecipe();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, isLoaded, isSignedIn]);
+      fetchRecipe();
+      return () => {
+        cancelled = true;
+      };
+    }, [id, isLoaded, isSignedIn]),
+  );
 
   const videoPlayer = useVideoPlayer(recipe?.video ?? null, (player) => {
     player.loop = false;
@@ -128,15 +130,26 @@ export default function RecipeDetailScreen() {
         ]}
       >
         <ThemedView style={styles.inner}>
-          <Pressable
-            style={[
-              styles.backButton,
-              { backgroundColor: theme.backgroundElement },
-            ]}
-            onPress={() => router.back()}
-          >
-            <ThemedText type="small">← Back</ThemedText>
-          </Pressable>
+          <View style={styles.headerRow}>
+            <Pressable
+              style={[
+                styles.backButton,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+              onPress={() => router.back()}
+            >
+              <ThemedText type="small">← Back</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.editButton,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+              onPress={() => router.push(`/recipe/edit/${recipe.id}`)}
+            >
+              <ThemedText type="small">Edit</ThemedText>
+            </Pressable>
+          </View>
 
           <ThemedText type="subtitle">{recipe.name}</ThemedText>
 
@@ -212,10 +225,19 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   backButton: {
-    alignSelf: "flex-start",
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
+  },
+  editButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.three,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: Spacing.two,
   },
   imageContainer: {

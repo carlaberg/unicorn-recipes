@@ -166,6 +166,87 @@ describe("Recipe API Integration Tests", () => {
       expect(body.name).toBe("Updated");
     });
 
+    it("updates image, video and instructions when provided", async () => {
+      vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+      vi.mocked(db.recipe.update).mockResolvedValue({
+        ...mockRecipe,
+        image: "https://res.cloudinary.com/demo/image/upload/new.jpg",
+        video: null,
+        instructions: "New instructions",
+      } as any);
+
+      const payload = {
+        image: "https://res.cloudinary.com/demo/image/upload/new.jpg",
+        video: null,
+        instructions: "New instructions",
+      };
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/me/recipes/1",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(vi.mocked(db.recipe.update)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            image: payload.image,
+            video: payload.video,
+            instructions: payload.instructions,
+          }),
+        }),
+      );
+    });
+
+    it("replaces ingredients only when ingredients are provided", async () => {
+      vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+      vi.mocked(db.recipeIngredient.deleteMany).mockResolvedValue({
+        count: 1,
+      } as any);
+      vi.mocked(db.recipe.update).mockResolvedValue({
+        ...mockRecipe,
+        ingredients: [
+          {
+            amount: 1,
+            unit: "cups",
+            ingredient: { name: "flour" },
+          },
+        ],
+      } as any);
+
+      const payload = {
+        ingredients: [{ name: "flour", amount: 1, unit: "cups" }],
+      };
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/me/recipes/1",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(vi.mocked(db.recipeIngredient.deleteMany)).toHaveBeenCalledWith({
+        where: { recipeId: 1 },
+      });
+    });
+
+    it("returns 400 when no updatable fields are provided", async () => {
+      vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/me/recipes/1",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(vi.mocked(db.recipe.update)).not.toHaveBeenCalled();
+    });
+
     it("returns 404 when recipe not found", async () => {
       vi.mocked(db.recipe.findFirst).mockResolvedValue(null);
 
