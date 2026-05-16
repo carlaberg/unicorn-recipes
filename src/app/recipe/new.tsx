@@ -1,6 +1,6 @@
 import { useAuth } from "@clerk/clerk-expo";
-import { Picker } from "@react-native-picker/picker";
 import TextRecognition from "@react-native-ml-kit/text-recognition";
+import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -345,12 +345,14 @@ export default function NewRecipeScreen() {
 
       const ocrResult = await TextRecognition.recognize(capturedImageUri);
       const rawText = ocrResult.text?.trim() ?? "";
+      console.log("[OCR] Extracted text:", rawText);
 
       if (!rawText) {
         Alert.alert("Scan failed", "No readable text was found in the photo.");
         return;
       }
 
+      console.log("[API] Sending scan request with OCR text");
       const response = await authorizedFetch("/me/recipes/scan", getToken, {
         method: "POST",
         headers: {

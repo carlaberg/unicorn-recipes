@@ -409,8 +409,18 @@ export async function recipeRoutes(app: FastifyInstance) {
       }
 
       try {
+        const prompt = buildScanPrompt(parsedBody.data.rawText);
+        request.log.info(
+          { rawTextLength: parsedBody.data.rawText.length },
+          "[Gemini] OCR input received",
+        );
+        request.log.info(
+          { prompt },
+          "[Gemini] Full prompt being sent to model",
+        );
+
         const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
           {
             method: "POST",
             headers: {
@@ -420,7 +430,7 @@ export async function recipeRoutes(app: FastifyInstance) {
             body: JSON.stringify({
               contents: [
                 {
-                  parts: [{ text: buildScanPrompt(parsedBody.data.rawText) }],
+                  parts: [{ text: prompt }],
                 },
               ],
               generationConfig: {
