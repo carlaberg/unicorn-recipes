@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -23,6 +24,8 @@ import { MaxContentWidth, Spacing } from "@/constants/theme";
 import { Ingredient, IngredientUnit, ingredientUnits } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
+
+type ImportSource = "upload" | "scan" | "text";
 
 export default function NewRecipeScreen() {
   const theme = useTheme();
@@ -40,7 +43,10 @@ export default function NewRecipeScreen() {
   );
   const [instructions, setInstructions] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
+  const [activeImport, setActiveImport] = useState<ImportSource | null>(null);
+  const [isTextImportModalVisible, setIsTextImportModalVisible] =
+    useState(false);
+  const [importText, setImportText] = useState("");
 
   const canAddIngredient =
     ingredientName.trim().length > 0 && ingredientAmount.trim().length > 0;
@@ -49,6 +55,13 @@ export default function NewRecipeScreen() {
     image.trim().length > 0 &&
     ingredients.length > 0 &&
     instructions.trim().length > 0;
+  const isImporting = activeImport !== null;
+  const hasExistingFormContent =
+    title.trim().length > 0 ||
+    instructions.trim().length > 0 ||
+    ingredients.length > 0 ||
+    image.trim().length > 0 ||
+    video.trim().length > 0;
 
   function getFileName(uri: string, fallbackExt: string) {
     const uriParts = uri.split("/");
@@ -289,6 +302,118 @@ export default function NewRecipeScreen() {
     );
   }
 
+  function parseApiErrorMessage(errorText: string, fallback: string) {
+    if (!errorText) {
+      return fallback;
+    }
+
+    try {
+      const parsedError = JSON.parse(errorText) as { message?: unknown };
+      if (
+        typeof parsedError.message === "string" &&
+        parsedError.message.trim().length > 0
+      ) {
+        return parsedError.message;
+      }
+    } catch {
+      // Non-JSON error payloads should still be surfaced as text.
+    }
+
+    return errorText;
+  }
+
+  async function confirmReplaceExistingForm() {
+    if (!hasExistingFormContent) {
+      return true;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Replace current form?",
+        "Import will replace the current title, ingredients, and instructions.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => resolve(false),
+          },
+          {
+            text: "Replace",
+            style: "destructive",
+            onPress: () => resolve(true),
+          },
+        ],
+        {
+          cancelable: true,
+          onDismiss: () => resolve(false),
+        },
+      );
+    });
+  }
+
+  async function importFromRawText(
+    rawText: string,
+    source: ImportSource,
+  ): Promise<boolean> {
+    if (isImporting) {
+      return false;
+    }
+
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in required",
+        "Please sign in before importing a recipe.",
+      );
+      return false;
+    }
+
+    const shouldReplace = await confirmReplaceExistingForm();
+    if (!shouldReplace) {
+      return false;
+    }
+
+    try {
+      setActiveImport(source);
+
+      const response = await authorizedFetch("/me/recipes/scan", getToken, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ rawText }),
+      });
+
+      if (!response.ok) {
+        const fallback =
+          response.status === 422
+            ? "Could not parse a complete recipe. Try clearer source text."
+            : "Recipe import failed";
+        const errorText = await response.text();
+        throw new Error(parseApiErrorMessage(errorText, fallback));
+      }
+
+      const json = (await response.json()) as unknown;
+      const parsedRecipe = parseScanRecipeResponse(json);
+
+      if (!parsedRecipe) {
+        throw new Error("Received invalid import data from the server.");
+      }
+
+      setTitle(parsedRecipe.title);
+      setInstructions(parsedRecipe.instructions);
+      setIngredients(parsedRecipe.ingredients);
+
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to import recipe";
+      Alert.alert("Import failed", message);
+      return false;
+    } finally {
+      setActiveImport(null);
+    }
+  }
+
   async function handlePickImage() {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -309,16 +434,43 @@ export default function NewRecipeScreen() {
     }
   }
 
-  async function handleScanRecipe() {
-    if (isScanning) {
+  async function handleImportFromDevice() {
+    if (isImporting) {
       return;
     }
 
-    if (!isSignedIn) {
-      Alert.alert(
-        "Sign in required",
-        "Please sign in before scanning a recipe.",
-      );
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert("Permission required", "Please allow photo library access.");
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (pickerResult.canceled || pickerResult.assets.length === 0) {
+      return;
+    }
+
+    const selectedImageUri = pickerResult.assets[0].uri;
+    const ocrResult = await TextRecognition.recognize(selectedImageUri);
+    const rawText = ocrResult.text?.trim() ?? "";
+
+    if (!rawText) {
+      Alert.alert("Import failed", "No readable text was found in the photo.");
+      return;
+    }
+
+    await importFromRawText(rawText, "upload");
+  }
+
+  async function handleScanRecipe() {
+    if (isImporting) {
       return;
     }
 
@@ -340,54 +492,33 @@ export default function NewRecipeScreen() {
 
     const capturedImageUri = cameraResult.assets[0].uri;
 
-    try {
-      setIsScanning(true);
+    const ocrResult = await TextRecognition.recognize(capturedImageUri);
+    const rawText = ocrResult.text?.trim() ?? "";
 
-      const ocrResult = await TextRecognition.recognize(capturedImageUri);
-      const rawText = ocrResult.text?.trim() ?? "";
-      console.log("[OCR] Extracted text:", rawText);
+    if (!rawText) {
+      Alert.alert("Scan failed", "No readable text was found in the photo.");
+      return;
+    }
 
-      if (!rawText) {
-        Alert.alert("Scan failed", "No readable text was found in the photo.");
-        return;
-      }
+    await importFromRawText(rawText, "scan");
+  }
 
-      console.log("[API] Sending scan request with OCR text");
-      const response = await authorizedFetch("/me/recipes/scan", getToken, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ rawText }),
-      });
+  function openCreateFromTextModal() {
+    setIsTextImportModalVisible(true);
+  }
 
-      if (!response.ok) {
-        const fallback =
-          response.status === 422
-            ? "Could not parse a complete recipe. Try a clearer photo."
-            : "Recipe scan failed";
-        const errorText = await response.text();
-        throw new Error(errorText || fallback);
-      }
+  async function handleImportFromText() {
+    const rawText = importText.trim();
 
-      const json = (await response.json()) as unknown;
-      const parsedRecipe = parseScanRecipeResponse(json);
+    if (!rawText) {
+      Alert.alert("Text required", "Paste recipe text to import.");
+      return;
+    }
 
-      if (!parsedRecipe) {
-        throw new Error("Received invalid scan data from the server.");
-      }
-
-      setTitle(parsedRecipe.title);
-      setInstructions(parsedRecipe.instructions);
-      setIngredients(parsedRecipe.ingredients);
-      setImage(capturedImageUri);
-      setVideo("");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to scan recipe";
-      Alert.alert("Scan failed", message);
-    } finally {
-      setIsScanning(false);
+    const wasImported = await importFromRawText(rawText, "text");
+    if (wasImported) {
+      setImportText("");
+      setIsTextImportModalVisible(false);
     }
   }
 
@@ -445,6 +576,62 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
+                Import
+              </ThemedText>
+              <ThemedText themeColor="textSecondary">
+                Prefill the form from a photo or raw recipe text.
+              </ThemedText>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    opacity: isImporting ? 0.7 : 1,
+                  },
+                ]}
+                onPress={handleImportFromDevice}
+                disabled={isImporting}
+              >
+                <ThemedText type="smallBold">
+                  {activeImport === "upload"
+                    ? "Importing..."
+                    : "Upload from device"}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    opacity: isImporting ? 0.7 : 1,
+                  },
+                ]}
+                onPress={handleScanRecipe}
+                disabled={isImporting}
+              >
+                <ThemedText type="smallBold">
+                  {activeImport === "scan" ? "Scanning..." : "Scan recipe"}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    opacity: isImporting ? 0.7 : 1,
+                  },
+                ]}
+                onPress={openCreateFromTextModal}
+                disabled={isImporting}
+              >
+                <ThemedText type="smallBold">Create from text</ThemedText>
+              </Pressable>
+            </ThemedView>
+
+            <ThemedView
+              style={[styles.field, { borderColor: theme.backgroundElement }]}
+            >
+              <ThemedText type="smallBold" themeColor="textSecondary">
                 Title
               </ThemedText>
               <TextInput
@@ -468,6 +655,9 @@ export default function NewRecipeScreen() {
               <ThemedText type="smallBold" themeColor="textSecondary">
                 Recipe Image
               </ThemedText>
+              <ThemedText themeColor="textSecondary">
+                Choose the recipe image manually from your photo library.
+              </ThemedText>
               <Pressable
                 style={[
                   styles.imageButton,
@@ -478,21 +668,7 @@ export default function NewRecipeScreen() {
                 onPress={handlePickImage}
               >
                 <ThemedText type="smallBold">
-                  {image ? "Change Image" : "Upload From Device"}
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.imageButton,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                  },
-                ]}
-                onPress={handleScanRecipe}
-                disabled={isScanning}
-              >
-                <ThemedText type="smallBold">
-                  {isScanning ? "Scanning..." : "Scan Recipe"}
+                  {image ? "Change image" : "Choose from photos"}
                 </ThemedText>
               </Pressable>
               {image ? (
@@ -672,6 +848,81 @@ export default function NewRecipeScreen() {
                 {isSubmitting ? "Saving..." : "Save Recipe"}
               </ThemedText>
             </Pressable>
+
+            <Modal
+              visible={isTextImportModalVisible}
+              animationType="slide"
+              transparent
+              onRequestClose={() => setIsTextImportModalVisible(false)}
+            >
+              <ThemedView
+                style={[
+                  styles.modalOverlay,
+                  { backgroundColor: "rgba(0, 0, 0, 0.45)" },
+                ]}
+              >
+                <ThemedView
+                  style={[
+                    styles.modalCard,
+                    {
+                      backgroundColor: theme.background,
+                      borderColor: theme.backgroundElement,
+                    },
+                  ]}
+                >
+                  <ThemedText type="smallBold">Create from text</ThemedText>
+                  <ThemedText themeColor="textSecondary">
+                    Paste recipe text to prefill title, ingredients, and
+                    instructions.
+                  </ThemedText>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.importTextInput,
+                      {
+                        backgroundColor: theme.backgroundElement,
+                        color: theme.text,
+                      },
+                    ]}
+                    placeholder="Paste raw recipe text..."
+                    placeholderTextColor={theme.textSecondary}
+                    value={importText}
+                    onChangeText={setImportText}
+                    multiline
+                    numberOfLines={8}
+                  />
+                  <ThemedView style={styles.modalActions}>
+                    <Pressable
+                      style={[
+                        styles.modalButton,
+                        { backgroundColor: theme.backgroundElement },
+                      ]}
+                      onPress={() => setIsTextImportModalVisible(false)}
+                      disabled={activeImport === "text"}
+                    >
+                      <ThemedText type="smallBold">Cancel</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.modalButton,
+                        {
+                          backgroundColor:
+                            activeImport === "text"
+                              ? theme.backgroundSelected
+                              : "#FF8A00",
+                        },
+                      ]}
+                      onPress={handleImportFromText}
+                      disabled={activeImport === "text"}
+                    >
+                      <ThemedText type="smallBold">
+                        {activeImport === "text" ? "Importing..." : "Import"}
+                      </ThemedText>
+                    </Pressable>
+                  </ThemedView>
+                </ThemedView>
+              </ThemedView>
+            </Modal>
           </ThemedView>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -769,5 +1020,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.three,
     borderRadius: Spacing.three,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: Spacing.four,
+  },
+  modalCard: {
+    borderWidth: 1,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  importTextInput: {
+    minHeight: 140,
+    textAlignVertical: "top",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: Spacing.two,
+    justifyContent: "flex-end",
+  },
+  modalButton: {
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    minWidth: 96,
+    alignItems: "center",
   },
 });
