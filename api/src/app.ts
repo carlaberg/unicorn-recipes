@@ -1,5 +1,6 @@
 import sensible from "@fastify/sensible";
 import Fastify, { FastifyInstance } from "fastify";
+import { menuRoutes } from "./routes/menu";
 import { recipeRoutes } from "./routes/recipes";
 import { userRoutes } from "./routes/users";
 import { clerkWebhookRoutes } from "./routes/webhooks";
@@ -21,6 +22,7 @@ export function buildApp(): FastifyInstance {
   app.register(clerkWebhookRoutes, { prefix: "/webhooks" });
   app.register(userRoutes, { prefix: "/users" });
   app.register(recipeRoutes, { prefix: "/me/recipes" });
+  app.register(menuRoutes, { prefix: "/me/menus" });
 
   return app;
 }
