@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import {
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -508,6 +509,8 @@ export default function NewRecipeScreen() {
   }
 
   async function handleImportFromText() {
+    Keyboard.dismiss();
+
     const rawText = importText.trim();
 
     if (!rawText) {
@@ -554,6 +557,8 @@ export default function NewRecipeScreen() {
       >
         <ScrollView
           style={{ backgroundColor: theme.background }}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
           contentContainerStyle={[
             styles.content,
             { paddingBottom: insets.bottom + Spacing.six },
@@ -861,66 +866,81 @@ export default function NewRecipeScreen() {
                   { backgroundColor: "rgba(0, 0, 0, 0.45)" },
                 ]}
               >
-                <ThemedView
-                  style={[
-                    styles.modalCard,
-                    {
-                      backgroundColor: theme.background,
-                      borderColor: theme.backgroundElement,
-                    },
-                  ]}
+                <KeyboardAvoidingView
+                  style={styles.modalKeyboardAvoiding}
+                  behavior={Platform.OS === "ios" ? "padding" : undefined}
                 >
-                  <ThemedText type="smallBold">Create from text</ThemedText>
-                  <ThemedText themeColor="textSecondary">
-                    Paste recipe text to prefill title, ingredients, and
-                    instructions.
-                  </ThemedText>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.importTextInput,
-                      {
-                        backgroundColor: theme.backgroundElement,
-                        color: theme.text,
-                      },
-                    ]}
-                    placeholder="Paste raw recipe text..."
-                    placeholderTextColor={theme.textSecondary}
-                    value={importText}
-                    onChangeText={setImportText}
-                    multiline
-                    numberOfLines={8}
-                  />
-                  <ThemedView style={styles.modalActions}>
-                    <Pressable
+                  <ScrollView
+                    keyboardShouldPersistTaps="always"
+                    keyboardDismissMode="none"
+                    contentContainerStyle={styles.modalScrollContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <ThemedView
                       style={[
-                        styles.modalButton,
-                        { backgroundColor: theme.backgroundElement },
-                      ]}
-                      onPress={() => setIsTextImportModalVisible(false)}
-                      disabled={activeImport === "text"}
-                    >
-                      <ThemedText type="smallBold">Cancel</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.modalButton,
+                        styles.modalCard,
                         {
-                          backgroundColor:
-                            activeImport === "text"
-                              ? theme.backgroundSelected
-                              : "#FF8A00",
+                          backgroundColor: theme.background,
+                          borderColor: theme.backgroundElement,
                         },
                       ]}
-                      onPress={handleImportFromText}
-                      disabled={activeImport === "text"}
                     >
-                      <ThemedText type="smallBold">
-                        {activeImport === "text" ? "Importing..." : "Import"}
+                      <ThemedText type="smallBold">Create from text</ThemedText>
+                      <ThemedText themeColor="textSecondary">
+                        Paste recipe text to prefill title, ingredients, and
+                        instructions.
                       </ThemedText>
-                    </Pressable>
-                  </ThemedView>
-                </ThemedView>
+                      <TextInput
+                        style={[
+                          styles.input,
+                          styles.importTextInput,
+                          {
+                            backgroundColor: theme.backgroundElement,
+                            color: theme.text,
+                          },
+                        ]}
+                        placeholder="Paste raw recipe text..."
+                        placeholderTextColor={theme.textSecondary}
+                        value={importText}
+                        onChangeText={setImportText}
+                        multiline
+                        numberOfLines={8}
+                        textAlignVertical="top"
+                      />
+                      <ThemedView style={styles.modalActions}>
+                        <Pressable
+                          style={[
+                            styles.modalButton,
+                            { backgroundColor: theme.backgroundElement },
+                          ]}
+                          onPress={() => setIsTextImportModalVisible(false)}
+                          disabled={activeImport === "text"}
+                        >
+                          <ThemedText type="smallBold">Cancel</ThemedText>
+                        </Pressable>
+                        <Pressable
+                          style={[
+                            styles.modalButton,
+                            {
+                              backgroundColor:
+                                activeImport === "text"
+                                  ? theme.backgroundSelected
+                                  : "#FF8A00",
+                            },
+                          ]}
+                          onPress={handleImportFromText}
+                          disabled={activeImport === "text"}
+                        >
+                          <ThemedText type="smallBold">
+                            {activeImport === "text"
+                              ? "Importing..."
+                              : "Import"}
+                          </ThemedText>
+                        </Pressable>
+                      </ThemedView>
+                    </ThemedView>
+                  </ScrollView>
+                </KeyboardAvoidingView>
               </ThemedView>
             </Modal>
           </ThemedView>
@@ -1025,6 +1045,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     padding: Spacing.four,
+  },
+  modalKeyboardAvoiding: {
+    width: "100%",
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
   },
   modalCard: {
     borderWidth: 1,

@@ -79,7 +79,7 @@ const scanRecipeResponseSchema = z.object({
   ingredients: z.array(
     z.object({
       name: z.string().trim().min(1),
-      amount: z.coerce.number().positive(),
+      amount: z.coerce.number().nonnegative(),
       unit: z.enum(allowedIngredientUnits),
     }),
   ),
@@ -126,6 +126,7 @@ function stripCodeFences(text: string) {
 
 function extractStructuredRecipe(
   geminiResponse: z.infer<typeof geminiGenerateContentSchema>,
+  log?: { warn: (obj: unknown, msg: string) => void },
 ) {
   const text = geminiResponse.candidates
     .flatMap((candidate) => candidate.content.parts)
@@ -137,9 +138,14 @@ function extractStructuredRecipe(
     throw new Error("Gemini returned an empty response");
   }
 
-  const parsedJson = JSON.parse(stripCodeFences(text));
+  const stripped = stripCodeFences(text);
+  const parsedJson = JSON.parse(stripped);
   const parsedRecipe = scanRecipeResponseSchema.safeParse(parsedJson);
   if (!parsedRecipe.success) {
+    log?.warn(
+      { geminiText: stripped, issues: parsedRecipe.error.issues },
+      "Gemini response did not match recipe schema",
+    );
     throw new Error("Gemini response did not match recipe schema");
   }
 
@@ -153,8 +159,21 @@ function buildScanPrompt(rawText: string) {
     "Return only valid minified JSON with this exact shape:",
     '{"title":"string","instructions":"string","ingredients":[{"name":"string","amount":1.5,"unit":"cups"}]}',
     `Allowed ingredient units: ${units}.`,
+    "IMPORTANT unit conversion rules — always convert to an allowed unit:",
+    "  msk/tbsp/matsked → tbsp",
+    "  tsk/tesked → tsp",
+    "  dl → ml (multiply amount by 100, e.g. 0.5 dl = 50 ml)",
+    "  cl → ml (multiply amount by 10)",
+    "  liter/litre → l",
+    "  st/stycken/pieces/pcs → pieces",
+    "  krm/kryddmått/nypa/pinch → pinches",
+    "  gram → g",
+    "  kilo/kilogram → kg",
+    "  If no unit is given, use 'pieces'.",
+    "Always use a dot (.) as the decimal separator, never a comma.",
+    "If an ingredient has no stated amount, use 1.",
     "Do not include markdown, comments, or extra keys.",
-    "If data is missing, use empty strings and an empty ingredients array.",
+    "If the recipe title or instructions are missing, use empty strings and an empty ingredients array.",
     "OCR text:",
     rawText,
   ].join("\n");
@@ -506,7 +525,10 @@ export async function recipeRoutes(app: FastifyInstance) {
         }
 
         try {
-          const scanResult = extractStructuredRecipe(parsedGeminiResponse.data);
+          const scanResult = extractStructuredRecipe(
+            parsedGeminiResponse.data,
+            request.log,
+          );
           return reply.status(200).send(scanResult);
         } catch (error) {
           request.log.warn(
