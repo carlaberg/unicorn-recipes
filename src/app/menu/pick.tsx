@@ -99,6 +99,14 @@ export default function MenuPickScreen() {
     }
   }
 
+  function handleBack() {
+    const weekStartParam =
+      typeof weekStart === "string" && weekStart.length > 0
+        ? weekStart
+        : new Date().toISOString().slice(0, 10);
+    router.replace(`/menu?weekStart=${weekStartParam}`);
+  }
+
   return (
     <ThemedView style={styles.container}>
       {isSaving && (
@@ -106,13 +114,27 @@ export default function MenuPickScreen() {
           <ActivityIndicator color={theme.text} />
         </View>
       )}
+      <Pressable
+        onPress={handleBack}
+        style={[
+          styles.backButton,
+          {
+            marginTop: insets.top + Spacing.two,
+            marginHorizontal: Spacing.three,
+            marginBottom: Spacing.two,
+            backgroundColor: theme.backgroundElement,
+          },
+        ]}
+      >
+        <ThemedText type="small">← Back</ThemedText>
+      </Pressable>
       <FlatList
         data={recipes}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={[
           styles.list,
           {
-            paddingTop: insets.top + Spacing.three,
+            paddingTop: 0,
             paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
           },
         ]}
@@ -151,6 +173,12 @@ export default function MenuPickScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.three,
   },
   list: {
     paddingHorizontal: Spacing.three,
