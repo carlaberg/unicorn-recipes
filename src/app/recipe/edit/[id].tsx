@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
 import {
     ApiRecipe,
@@ -80,7 +81,9 @@ export default function EditRecipeScreen() {
         );
 
         if (!response.ok) {
-          throw new Error(`Failed to load recipe (${response.status})`);
+          throw new Error(
+            `${STRINGS.recipeEdit.fetchFailed} (${response.status})`,
+          );
         }
 
         const loaded = (await response.json()) as ApiRecipe;
@@ -111,8 +114,10 @@ export default function EditRecipeScreen() {
       } catch (error) {
         if (!cancelled) {
           Alert.alert(
-            "Load failed",
-            error instanceof Error ? error.message : "Failed to load recipe",
+            STRINGS.recipeEdit.loadFailedTitle,
+            error instanceof Error
+              ? error.message
+              : STRINGS.recipeEdit.fetchFailed,
           );
           router.back();
         }
@@ -180,9 +185,7 @@ export default function EditRecipeScreen() {
     const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
     if (!cloudName || !uploadPreset) {
-      throw new Error(
-        "Missing Cloudinary env vars: EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET",
-      );
+      throw new Error(STRINGS.common.cloudinaryMissingEnv);
     }
 
     const formData = new FormData();
@@ -210,7 +213,7 @@ export default function EditRecipeScreen() {
       const cloudinaryMessage =
         typeof json.error?.message === "string"
           ? json.error.message
-          : "Cloudinary upload failed";
+          : STRINGS.common.cloudinaryUploadFailed;
       throw new Error(cloudinaryMessage);
     }
 
@@ -285,8 +288,8 @@ export default function EditRecipeScreen() {
 
     if (!isSignedIn) {
       Alert.alert(
-        "Sign in required",
-        "Please sign in before editing a recipe.",
+        STRINGS.recipeEdit.signInRequiredTitle,
+        STRINGS.recipeEdit.signInRequiredBody,
       );
       return;
     }
@@ -360,7 +363,10 @@ export default function EditRecipeScreen() {
       }
 
       if (Object.keys(payload).length === 0) {
-        Alert.alert("No changes", "Update at least one field before saving.");
+        Alert.alert(
+          STRINGS.recipeEdit.noChangesTitle,
+          STRINGS.recipeEdit.noChangesBody,
+        );
         return;
       }
 
@@ -377,7 +383,7 @@ export default function EditRecipeScreen() {
       );
 
       if (!response.ok) {
-        const fallback = "Failed to update recipe";
+        const fallback = STRINGS.recipeEdit.updateFailed;
         const errorText = await response.text();
         throw new Error(parseApiErrorMessage(errorText, fallback));
       }
@@ -387,8 +393,10 @@ export default function EditRecipeScreen() {
     } catch (error) {
       await cleanupUrls(uploadedAssetUrls);
       const message =
-        error instanceof Error ? error.message : "Failed to update recipe";
-      Alert.alert("Update failed", message);
+        error instanceof Error
+          ? error.message
+          : STRINGS.recipeEdit.updateFailed;
+      Alert.alert(STRINGS.recipeEdit.updateFailedTitle, message);
     } finally {
       setIsSubmitting(false);
     }
@@ -425,7 +433,10 @@ export default function EditRecipeScreen() {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Please allow photo library access.");
+      Alert.alert(
+        STRINGS.recipeEdit.permissionRequiredTitle,
+        STRINGS.recipeEdit.allowPhotoLibrary,
+      );
       return;
     }
 
@@ -445,7 +456,10 @@ export default function EditRecipeScreen() {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Please allow photo library access.");
+      Alert.alert(
+        STRINGS.recipeEdit.permissionRequiredTitle,
+        STRINGS.recipeEdit.allowPhotoLibrary,
+      );
       return;
     }
 
@@ -489,16 +503,16 @@ export default function EditRecipeScreen() {
               ]}
               onPress={() => router.back()}
             >
-              <ThemedText type="small">← Back</ThemedText>
+              <ThemedText type="small">{STRINGS.recipeEdit.back}</ThemedText>
             </Pressable>
 
-            <ThemedText type="subtitle">Edit Recipe</ThemedText>
+            <ThemedText type="subtitle">{STRINGS.recipeEdit.title}</ThemedText>
 
             <ThemedView
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Title
+                {STRINGS.recipeEdit.recipeTitle}
               </ThemedText>
               <TextInput
                 style={[
@@ -508,7 +522,7 @@ export default function EditRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Recipe title"
+                placeholder={STRINGS.recipeEdit.recipeTitlePlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={title}
                 onChangeText={setTitle}
@@ -519,7 +533,7 @@ export default function EditRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Recipe Image
+                {STRINGS.recipeEdit.recipeImage}
               </ThemedText>
               <Pressable
                 style={[
@@ -531,7 +545,9 @@ export default function EditRecipeScreen() {
                 onPress={handlePickImage}
               >
                 <ThemedText type="smallBold">
-                  {image ? "Change image" : "Choose from photos"}
+                  {image
+                    ? STRINGS.recipeEdit.changeImage
+                    : STRINGS.recipeEdit.chooseImage}
                 </ThemedText>
               </Pressable>
               {image ? (
@@ -547,7 +563,7 @@ export default function EditRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Recipe Video (Optional)
+                {STRINGS.recipeEdit.recipeVideoOptional}
               </ThemedText>
               <Pressable
                 style={[
@@ -559,7 +575,9 @@ export default function EditRecipeScreen() {
                 onPress={handlePickVideo}
               >
                 <ThemedText type="smallBold">
-                  {video ? "Change video" : "Upload video from device"}
+                  {video
+                    ? STRINGS.recipeEdit.changeVideo
+                    : STRINGS.recipeEdit.uploadVideo}
                 </ThemedText>
               </Pressable>
               {video ? (
@@ -570,7 +588,9 @@ export default function EditRecipeScreen() {
                   ]}
                   onPress={() => setVideo("")}
                 >
-                  <ThemedText type="smallBold">Remove video</ThemedText>
+                  <ThemedText type="smallBold">
+                    {STRINGS.recipeEdit.removeVideo}
+                  </ThemedText>
                 </Pressable>
               ) : null}
               {video ? (
@@ -582,7 +602,7 @@ export default function EditRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Add Ingredient
+                {STRINGS.recipeEdit.addIngredient}
               </ThemedText>
               <TextInput
                 style={[
@@ -592,7 +612,7 @@ export default function EditRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Amount"
+                placeholder={STRINGS.recipeEdit.amountPlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={ingredientAmount}
                 onChangeText={setIngredientAmount}
@@ -625,7 +645,7 @@ export default function EditRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Ingredient name"
+                placeholder={STRINGS.recipeEdit.ingredientNamePlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={ingredientName}
                 onChangeText={setIngredientName}
@@ -642,7 +662,9 @@ export default function EditRecipeScreen() {
                 disabled={!canAddIngredient}
                 onPress={handleAddIngredient}
               >
-                <ThemedText type="smallBold">Add Ingredient</ThemedText>
+                <ThemedText type="smallBold">
+                  {STRINGS.recipeEdit.addIngredientButton}
+                </ThemedText>
               </Pressable>
             </ThemedView>
 
@@ -650,12 +672,12 @@ export default function EditRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Ingredients
+                {STRINGS.recipeEdit.ingredients}
               </ThemedText>
               <ThemedView style={styles.ingredientsList}>
                 {ingredients.length === 0 ? (
                   <ThemedText themeColor="textSecondary">
-                    No ingredients added yet.
+                    {STRINGS.recipeEdit.noIngredients}
                   </ThemedText>
                 ) : (
                   ingredients.map((ingredient, index) => (
@@ -674,7 +696,9 @@ export default function EditRecipeScreen() {
                         ]}
                         onPress={() => handleRemoveIngredient(index)}
                       >
-                        <ThemedText type="smallBold">Remove</ThemedText>
+                        <ThemedText type="smallBold">
+                          {STRINGS.recipeEdit.remove}
+                        </ThemedText>
                       </Pressable>
                     </ThemedView>
                   ))
@@ -686,7 +710,7 @@ export default function EditRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Instructions
+                {STRINGS.recipeEdit.instructions}
               </ThemedText>
               <TextInput
                 style={[
@@ -697,7 +721,7 @@ export default function EditRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Describe the steps..."
+                placeholder={STRINGS.recipeEdit.instructionsPlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={instructions}
                 onChangeText={setInstructions}
@@ -719,7 +743,9 @@ export default function EditRecipeScreen() {
               onPress={handleSubmit}
             >
               <ThemedText type="smallBold">
-                {isSubmitting ? "Saving..." : "Save Changes"}
+                {isSubmitting
+                  ? STRINGS.recipeEdit.saving
+                  : STRINGS.recipeEdit.saveChanges}
               </ThemedText>
             </Pressable>
           </ThemedView>

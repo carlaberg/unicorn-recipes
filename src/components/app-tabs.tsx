@@ -2,6 +2,7 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 import React from "react";
 import { useColorScheme } from "react-native";
 
+import { STRINGS } from "@/constants/strings";
 import { Colors } from "@/constants/theme";
 
 export default function AppTabs() {
@@ -15,7 +16,7 @@ export default function AppTabs() {
       labelStyle={{ selected: { color: colors.text } }}
     >
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{STRINGS.tabs.home}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require("@/assets/images/tabIcons/home.png")}
           renderingMode="template"
@@ -23,7 +24,9 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="recipes">
-        <NativeTabs.Trigger.Label>Recipes</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>
+          {STRINGS.tabs.recipes}
+        </NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf={{ default: "book", selected: "book.fill" }}
           src={require("@/assets/images/tabIcons/recipes.png")}
@@ -32,7 +35,7 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="menu">
-        <NativeTabs.Trigger.Label>Meny</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{STRINGS.tabs.menu}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf={{ default: "calendar", selected: "calendar" }}
           src={require("@/assets/images/tabIcons/recipes.png")}
@@ -41,7 +44,9 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="account">
-        <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>
+          {STRINGS.tabs.account}
+        </NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require("@/assets/images/tabIcons/account.png")}
           renderingMode="template"

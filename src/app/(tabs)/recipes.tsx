@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
@@ -90,7 +91,9 @@ export default function RecipesScreen() {
             getTokenRef.current,
           );
           if (!response.ok) {
-            throw new Error(`Failed to load recipes (${response.status})`);
+            throw new Error(
+              `${STRINGS.recipes.fetchFailed} (${response.status})`,
+            );
           }
           const data = (await response.json()) as ApiRecipe[];
           if (!cancelled) {
@@ -99,7 +102,7 @@ export default function RecipesScreen() {
         } catch (err) {
           if (!cancelled) {
             setError(
-              err instanceof Error ? err.message : "Failed to load recipes",
+              err instanceof Error ? err.message : STRINGS.recipes.fetchFailed,
             );
           }
         } finally {
@@ -133,7 +136,7 @@ export default function RecipesScreen() {
         ListHeaderComponent={
           <ThemedView style={styles.header}>
             <ThemedView style={styles.headerTopRow}>
-              <ThemedText type="subtitle">My Recipes</ThemedText>
+              <ThemedText type="subtitle">{STRINGS.recipes.title}</ThemedText>
               <Pressable
                 style={[
                   styles.addButton,
@@ -141,7 +144,9 @@ export default function RecipesScreen() {
                 ]}
                 onPress={() => router.push("/recipe/new")}
               >
-                <ThemedText type="small">+ Add Recipe</ThemedText>
+                <ThemedText type="small">
+                  {STRINGS.recipes.addRecipe}
+                </ThemedText>
               </Pressable>
             </ThemedView>
           </ThemedView>
@@ -153,7 +158,7 @@ export default function RecipesScreen() {
             <ThemedText themeColor="textSecondary">{error}</ThemedText>
           ) : (
             <ThemedText themeColor="textSecondary">
-              No recipes yet. Add your first one!
+              {STRINGS.recipes.empty}
             </ThemedText>
           )
         }

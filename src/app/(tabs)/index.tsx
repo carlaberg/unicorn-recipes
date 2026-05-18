@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 
 export default function HomeScreen() {
@@ -20,12 +21,13 @@ export default function HomeScreen() {
             resizeMode="contain"
           />
           <ThemedText type="title" style={styles.title}>
-            Unicorn Recipes
+            {STRINGS.tabs.brand}
           </ThemedText>
         </ThemedView>
 
         <ThemedText type="subtitle" style={styles.welcomeText}>
-          Welcome{user?.firstName ? `, ${user.firstName}` : ""}!
+          {STRINGS.home.welcome}
+          {user?.firstName ? `, ${user.firstName}` : ""}!
         </ThemedText>
       </SafeAreaView>
     </ThemedView>

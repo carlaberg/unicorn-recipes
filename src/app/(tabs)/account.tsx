@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -21,12 +22,12 @@ export default function AccountScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedText type="subtitle" style={styles.heading}>
-          Account
+          {STRINGS.account.title}
         </ThemedText>
 
         <ThemedView type="backgroundElement" style={styles.profileCard}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            Email
+            {STRINGS.account.emailLabel}
           </ThemedText>
           <ThemedText type="default">
             {user?.primaryEmailAddress?.emailAddress ?? user?.id}
@@ -37,7 +38,7 @@ export default function AccountScreen() {
           style={[styles.button, { backgroundColor: theme.backgroundElement }]}
           onPress={handleSignOut}
         >
-          <ThemedText type="small">Log Out</ThemedText>
+          <ThemedText type="small">{STRINGS.account.signOut}</ThemedText>
         </Pressable>
       </SafeAreaView>
     </ThemedView>

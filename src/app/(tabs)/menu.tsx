@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
@@ -141,13 +142,13 @@ function DayRow({
       <ThemedText style={styles.dayLabel}>{dayLabel}</ThemedText>
       <View style={styles.slots}>
         <MealSlot
-          label="Lunch"
+          label={STRINGS.menu.lunch}
           entry={lunch}
           onAdd={() => onAdd(dayOffset, "LUNCH")}
           onRemove={() => lunch && onRemove(lunch)}
         />
         <MealSlot
-          label="Middag"
+          label={STRINGS.menu.dinner}
           entry={dinner}
           onAdd={() => onAdd(dayOffset, "DINNER")}
           onRemove={() => dinner && onRemove(dinner)}
@@ -208,7 +209,9 @@ export default function MenuScreen() {
 
       try {
         const res = await authorizedFetch("/me/menus", getTokenRef.current);
-        if (!res.ok) throw new Error(`Kunde inte hämta menyer (${res.status})`);
+        if (!res.ok) {
+          throw new Error(`${STRINGS.menu.fetchMenusFailed} (${res.status})`);
+        }
 
         const menus = (await res.json()) as WeeklyMenu[];
         setAllMenus(menus);
@@ -221,7 +224,7 @@ export default function MenuScreen() {
 
         setActiveMenu(match);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Något gick fel");
+        setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
       } finally {
         setIsLoading(false);
       }
@@ -272,7 +275,9 @@ export default function MenuScreen() {
           ...(menuName && { name: menuName }),
         }),
       });
-      if (!res.ok) throw new Error(`Kunde inte skapa meny (${res.status})`);
+      if (!res.ok) {
+        throw new Error(`${STRINGS.menu.createMenuFailed} (${res.status})`);
+      }
 
       const createdMenu = (await res.json()) as WeeklyMenu;
 
@@ -289,7 +294,9 @@ export default function MenuScreen() {
           );
 
           if (!copyRes.ok) {
-            throw new Error(`Kunde inte kopiera meny (${copyRes.status})`);
+            throw new Error(
+              `${STRINGS.menu.copyMenuFailed} (${copyRes.status})`,
+            );
           }
         }
       }
@@ -297,7 +304,7 @@ export default function MenuScreen() {
       setMenuNameInput("");
       await fetchMenus(currentWeekStart);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Något gick fel");
+      setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
     } finally {
       setIsCreating(false);
       setIsReusingMenuId(null);
@@ -331,7 +338,7 @@ export default function MenuScreen() {
 
     const trimmedName = editedMenuName.trim();
     if (!trimmedName) {
-      setError("Menynamn kan inte vara tomt");
+      setError(STRINGS.menu.menuNameRequired);
       return;
     }
 
@@ -350,7 +357,7 @@ export default function MenuScreen() {
       );
 
       if (!res.ok) {
-        throw new Error(`Kunde inte uppdatera meny (${res.status})`);
+        throw new Error(`${STRINGS.menu.updateMenuFailed} (${res.status})`);
       }
 
       const updatedMenu = (await res.json()) as WeeklyMenu;
@@ -361,7 +368,7 @@ export default function MenuScreen() {
       setEditedMenuName(updatedMenu.name ?? "");
       setIsEditingName(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Något gick fel");
+      setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
     } finally {
       setIsSavingName(false);
     }
@@ -381,7 +388,7 @@ export default function MenuScreen() {
   });
 
   function getMenuDisplayName(menu: WeeklyMenu) {
-    const baseName = menu.name?.trim() || "Namnlos meny";
+    const baseName = menu.name?.trim() || STRINGS.menu.unnamedMenu;
     if (!menu.startDate) return baseName;
     const start = getWeekStart(new Date(menu.startDate));
     return `${baseName} - ${formatWeekRange(start)}`;
@@ -417,7 +424,7 @@ export default function MenuScreen() {
                   <TextInput
                     value={editedMenuName}
                     onChangeText={setEditedMenuName}
-                    placeholder="Menynamn"
+                    placeholder={STRINGS.menu.menuNamePlaceholder}
                     placeholderTextColor={theme.textSecondary}
                     style={[
                       styles.editNameInput,
@@ -435,11 +442,13 @@ export default function MenuScreen() {
                       }}
                       disabled={isSavingName}
                     >
-                      <ThemedText themeColor="textSecondary">Avbryt</ThemedText>
+                      <ThemedText themeColor="textSecondary">
+                        {STRINGS.menu.cancel}
+                      </ThemedText>
                     </Pressable>
                     <Pressable onPress={saveMenuName} disabled={isSavingName}>
                       <ThemedText>
-                        {isSavingName ? "Sparar..." : "Spara"}
+                        {isSavingName ? STRINGS.menu.saving : STRINGS.menu.save}
                       </ThemedText>
                     </Pressable>
                   </View>
@@ -456,7 +465,7 @@ export default function MenuScreen() {
                   )}
                   <Pressable onPress={() => setIsEditingName(true)}>
                     <ThemedText type="small" themeColor="textSecondary">
-                      Redigera
+                      {STRINGS.menu.edit}
                     </ThemedText>
                   </Pressable>
                 </View>
@@ -481,12 +490,12 @@ export default function MenuScreen() {
         ) : !activeMenu ? (
           <View style={styles.emptyState}>
             <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-              Ingen meny för den här veckan
+              {STRINGS.menu.noMenuForWeek}
             </ThemedText>
             <TextInput
               value={menuNameInput}
               onChangeText={setMenuNameInput}
-              placeholder="Namn på meny (valfritt)"
+              placeholder={STRINGS.menu.menuNameOptionalPlaceholder}
               placeholderTextColor={theme.textSecondary}
               style={[
                 styles.nameInput,
@@ -507,7 +516,7 @@ export default function MenuScreen() {
               {isCreating ? (
                 <ActivityIndicator color={theme.text} />
               ) : (
-                <ThemedText>Skapa meny</ThemedText>
+                <ThemedText>{STRINGS.menu.createMenu}</ThemedText>
               )}
             </Pressable>
 
@@ -518,7 +527,7 @@ export default function MenuScreen() {
                   themeColor="textSecondary"
                   style={styles.reuseTitle}
                 >
-                  Ateranvand tidigare meny
+                  {STRINGS.menu.reusePrevious}
                 </ThemedText>
                 {reusableMenus.map((menu) => (
                   <Pressable

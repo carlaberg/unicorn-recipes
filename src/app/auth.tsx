@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -38,12 +39,18 @@ export default function AuthScreen() {
 
   async function handleSubmit() {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Missing fields", "Please provide email and password.");
+      Alert.alert(
+        STRINGS.auth.missingFieldsTitle,
+        STRINGS.auth.missingEmailPassword,
+      );
       return;
     }
 
     if (isSignUpMode && !username.trim()) {
-      Alert.alert("Missing fields", "Please provide a username.");
+      Alert.alert(
+        STRINGS.auth.missingFieldsTitle,
+        STRINGS.auth.missingUsername,
+      );
       return;
     }
 
@@ -55,7 +62,7 @@ export default function AuthScreen() {
     try {
       if (isSignUpMode) {
         if (!isSignUpLoaded || !signUp) {
-          throw new Error("Sign up is not ready yet.");
+          throw new Error(STRINGS.auth.signUpNotReady);
         }
 
         const result = await signUp.create({
@@ -70,8 +77,8 @@ export default function AuthScreen() {
           });
           setIsPendingVerification(true);
           Alert.alert(
-            "Verify your email",
-            "We sent a verification code to your email address.",
+            STRINGS.auth.verifyEmailTitle,
+            STRINGS.auth.verifyEmailBody,
           );
           return;
         }
@@ -79,7 +86,7 @@ export default function AuthScreen() {
         await setSignUpActive?.({ session: result.createdSessionId });
       } else {
         if (!isSignInLoaded || !signIn) {
-          throw new Error("Sign in is not ready yet.");
+          throw new Error(STRINGS.auth.signInNotReady);
         }
 
         const result = await signIn.create({
@@ -96,18 +103,19 @@ export default function AuthScreen() {
             setSecondFactorStrategy(firstStrategy);
             setIsPendingSecondFactor(true);
             Alert.alert(
-              "Two-Factor Authentication",
-              `Please enter your ${firstStrategy} code.`,
+              STRINGS.auth.twoFactorTitle,
+              STRINGS.auth.twoFactorBody.replace("{strategy}", firstStrategy),
             );
             return;
           } else {
-            throw new Error("No second factor methods available.");
+            throw new Error(STRINGS.auth.noSecondFactor);
           }
         }
 
         if (result.status !== "complete" || !result.createdSessionId) {
+          const statusText = String(result.status ?? "okänd");
           throw new Error(
-            `Sign-in incomplete: status=${result.status}, sessionId=${result.createdSessionId}`,
+            STRINGS.auth.signInIncomplete.replace("{status}", statusText),
           );
         }
 
@@ -116,13 +124,13 @@ export default function AuthScreen() {
 
       setPassword("");
     } catch (error) {
-      let message = "Authentication failed";
+      let message: string = STRINGS.auth.authFailed;
       if (error instanceof Error) {
         message = error.message;
       } else if (typeof error === "object" && error !== null) {
         message = (error as any).message || JSON.stringify(error);
       }
-      Alert.alert("Authentication failed", message);
+      Alert.alert(STRINGS.auth.authFailed, message);
     } finally {
       setIsSubmitting(false);
     }
@@ -130,12 +138,12 @@ export default function AuthScreen() {
 
   async function handleVerifyEmailCode() {
     if (!verificationCode.trim()) {
-      Alert.alert("Missing code", "Please enter the verification code.");
+      Alert.alert(STRINGS.auth.missingCodeTitle, STRINGS.auth.missingEmailCode);
       return;
     }
 
     if (!isSignUpLoaded || !signUp) {
-      Alert.alert("Not ready", "Sign up is not ready yet.");
+      Alert.alert(STRINGS.auth.missingFieldsTitle, STRINGS.auth.signUpNotReady);
       return;
     }
 
@@ -150,7 +158,7 @@ export default function AuthScreen() {
       });
 
       if (result.status !== "complete" || !result.createdSessionId) {
-        throw new Error("Email verification was not completed.");
+        throw new Error(STRINGS.auth.emailVerificationIncomplete);
       }
 
       await setSignUpActive?.({ session: result.createdSessionId });
@@ -158,13 +166,13 @@ export default function AuthScreen() {
       setPassword("");
       setIsPendingVerification(false);
     } catch (error) {
-      let message = "Verification failed";
+      let message: string = STRINGS.auth.verifyFailed;
       if (error instanceof Error) {
         message = error.message;
       } else if (typeof error === "object" && error !== null) {
         message = (error as any).message || JSON.stringify(error);
       }
-      Alert.alert("Verification failed", message);
+      Alert.alert(STRINGS.auth.verifyFailed, message);
     } finally {
       setIsSubmitting(false);
     }
@@ -172,12 +180,15 @@ export default function AuthScreen() {
 
   async function handleVerifySecondFactor() {
     if (!secondFactorCode.trim()) {
-      Alert.alert("Missing code", "Please enter your verification code.");
+      Alert.alert(
+        STRINGS.auth.missingCodeTitle,
+        STRINGS.auth.missingSecondFactorCode,
+      );
       return;
     }
 
     if (!isSignInLoaded || !signIn) {
-      Alert.alert("Not ready", "Sign in is not ready yet.");
+      Alert.alert(STRINGS.auth.missingFieldsTitle, STRINGS.auth.signInNotReady);
       return;
     }
 
@@ -193,7 +204,7 @@ export default function AuthScreen() {
       });
 
       if (result.status !== "complete" || !result.createdSessionId) {
-        throw new Error("Second factor verification was not completed.");
+        throw new Error(STRINGS.auth.secondFactorIncomplete);
       }
 
       await setSignInActive?.({ session: result.createdSessionId });
@@ -201,13 +212,13 @@ export default function AuthScreen() {
       setSecondFactorStrategy(null);
       setIsPendingSecondFactor(false);
     } catch (error) {
-      let message = "Verification failed";
+      let message: string = STRINGS.auth.verifyFailed;
       if (error instanceof Error) {
         message = error.message;
       } else if (typeof error === "object" && error !== null) {
         message = (error as any).message || JSON.stringify(error);
       }
-      Alert.alert("Verification failed", message);
+      Alert.alert(STRINGS.auth.verifyFailed, message);
     } finally {
       setIsSubmitting(false);
     }
@@ -225,7 +236,7 @@ export default function AuthScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedText type="subtitle" style={styles.heading}>
-          {isSignUpMode ? "Create your account" : "Sign in"}
+          {isSignUpMode ? STRINGS.auth.signUpTitle : STRINGS.auth.signInTitle}
         </ThemedText>
 
         <TextInput
@@ -237,7 +248,7 @@ export default function AuthScreen() {
               backgroundColor: theme.backgroundElement,
             },
           ]}
-          placeholder="Email"
+          placeholder={STRINGS.auth.emailPlaceholder}
           placeholderTextColor={theme.textSecondary}
           autoCapitalize="none"
           keyboardType="email-address"
@@ -255,7 +266,7 @@ export default function AuthScreen() {
                 backgroundColor: theme.backgroundElement,
               },
             ]}
-            placeholder="Username"
+            placeholder={STRINGS.auth.usernamePlaceholder}
             placeholderTextColor={theme.textSecondary}
             autoCapitalize="none"
             value={username}
@@ -273,7 +284,7 @@ export default function AuthScreen() {
                 backgroundColor: theme.backgroundElement,
               },
             ]}
-            placeholder="Password"
+            placeholder={STRINGS.auth.passwordPlaceholder}
             placeholderTextColor={theme.textSecondary}
             secureTextEntry
             value={password}
@@ -289,7 +300,7 @@ export default function AuthScreen() {
                 backgroundColor: theme.backgroundElement,
               },
             ]}
-            placeholder="Verification code"
+            placeholder={STRINGS.auth.verificationCodePlaceholder}
             placeholderTextColor={theme.textSecondary}
             keyboardType="number-pad"
             value={verificationCode}
@@ -305,7 +316,10 @@ export default function AuthScreen() {
                 backgroundColor: theme.backgroundElement,
               },
             ]}
-            placeholder={`${secondFactorStrategy} code`}
+            placeholder={STRINGS.auth.secondFactorCodePlaceholder.replace(
+              "{strategy}",
+              secondFactorStrategy ?? "",
+            )}
             placeholderTextColor={theme.textSecondary}
             keyboardType="number-pad"
             value={secondFactorCode}
@@ -325,14 +339,14 @@ export default function AuthScreen() {
         >
           <ThemedText type="small">
             {isSubmitting
-              ? "Please wait..."
+              ? STRINGS.auth.pleaseWait
               : isPendingSecondFactor
-                ? "Verify 2FA Code"
+                ? STRINGS.auth.verify2FA
                 : isPendingVerification
-                  ? "Verify Email"
+                  ? STRINGS.auth.verifyEmail
                   : isSignUpMode
-                    ? "Create Account"
-                    : "Log In"}
+                    ? STRINGS.auth.createAccount
+                    : STRINGS.auth.logIn}
           </ThemedText>
         </Pressable>
 
@@ -348,9 +362,7 @@ export default function AuthScreen() {
           }}
         >
           <ThemedText type="small" themeColor="textSecondary">
-            {isSignUpMode
-              ? "Already have an account? Log In"
-              : "Don't have an account? Create one"}
+            {isSignUpMode ? STRINGS.auth.hasAccount : STRINGS.auth.noAccount}
           </ThemedText>
         </Pressable>
       </SafeAreaView>

@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
 import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
@@ -74,7 +75,9 @@ export default function RecipeDetailScreen() {
             getTokenRef.current,
           );
           if (!response.ok) {
-            throw new Error(`Recipe not found (${response.status})`);
+            throw new Error(
+              `${STRINGS.recipeDetail.fetchFailed} (${response.status})`,
+            );
           }
           const data = (await response.json()) as ApiRecipe;
           if (!cancelled) {
@@ -83,7 +86,9 @@ export default function RecipeDetailScreen() {
         } catch (err) {
           if (!cancelled) {
             setError(
-              err instanceof Error ? err.message : "Failed to load recipe",
+              err instanceof Error
+                ? err.message
+                : STRINGS.recipeDetail.fetchFailed,
             );
           }
         } finally {
@@ -115,7 +120,7 @@ export default function RecipeDetailScreen() {
   if (error || !recipe) {
     return (
       <ThemedView style={styles.center}>
-        <ThemedText>{error ?? "Recipe not found."}</ThemedText>
+        <ThemedText>{error ?? STRINGS.recipeDetail.notFound}</ThemedText>
       </ThemedView>
     );
   }
@@ -138,7 +143,7 @@ export default function RecipeDetailScreen() {
               ]}
               onPress={() => router.back()}
             >
-              <ThemedText type="small">← Back</ThemedText>
+              <ThemedText type="small">{STRINGS.recipeDetail.back}</ThemedText>
             </Pressable>
             <Pressable
               style={[
@@ -147,7 +152,7 @@ export default function RecipeDetailScreen() {
               ]}
               onPress={() => router.push(`/recipe/edit/${recipe.id}`)}
             >
-              <ThemedText type="small">Edit</ThemedText>
+              <ThemedText type="small">{STRINGS.recipeDetail.edit}</ThemedText>
             </Pressable>
           </View>
 
@@ -166,7 +171,7 @@ export default function RecipeDetailScreen() {
             themeColor="textSecondary"
             style={styles.sectionLabel}
           >
-            Ingredients
+            {STRINGS.recipeDetail.ingredients}
           </ThemedText>
           {recipe.ingredients.map((item, index) => (
             <ThemedView key={index} style={styles.ingredientRow}>
@@ -182,7 +187,7 @@ export default function RecipeDetailScreen() {
             themeColor="textSecondary"
             style={styles.sectionLabel}
           >
-            Instructions
+            {STRINGS.recipeDetail.instructions}
           </ThemedText>
           <ThemedText type="default">{recipe.instructions}</ThemedText>
 
@@ -193,7 +198,7 @@ export default function RecipeDetailScreen() {
                 themeColor="textSecondary"
                 style={styles.sectionLabel}
               >
-                Video
+                {STRINGS.recipeDetail.video}
               </ThemedText>
               <VideoView player={videoPlayer} style={styles.video} />
             </>

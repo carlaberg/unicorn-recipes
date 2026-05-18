@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
 import { Ingredient, IngredientUnit, ingredientUnits } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
@@ -102,9 +103,7 @@ export default function NewRecipeScreen() {
     const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
     if (!cloudName || !uploadPreset) {
-      throw new Error(
-        "Missing Cloudinary env vars: EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET",
-      );
+      throw new Error(STRINGS.common.cloudinaryMissingEnv);
     }
 
     const formData = new FormData();
@@ -132,7 +131,7 @@ export default function NewRecipeScreen() {
       const cloudinaryMessage =
         typeof json.error?.message === "string"
           ? json.error.message
-          : "Cloudinary upload failed";
+          : STRINGS.common.cloudinaryUploadFailed;
       throw new Error(cloudinaryMessage);
     }
 
@@ -146,8 +145,8 @@ export default function NewRecipeScreen() {
 
     if (!isSignedIn) {
       Alert.alert(
-        "Sign in required",
-        "Please sign in before creating a recipe.",
+        STRINGS.recipeNew.signInRequiredTitle,
+        STRINGS.recipeNew.signInRequiredBody,
       );
       return;
     }
@@ -184,7 +183,7 @@ export default function NewRecipeScreen() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || "Failed to create recipe");
+        throw new Error(errorText || STRINGS.recipeNew.saveFailedTitle);
       }
 
       recipeCreated = true;
@@ -206,8 +205,10 @@ export default function NewRecipeScreen() {
       }
 
       const message =
-        error instanceof Error ? error.message : "Failed to save recipe";
-      Alert.alert("Save failed", message);
+        error instanceof Error
+          ? error.message
+          : STRINGS.recipeNew.saveFailedTitle;
+      Alert.alert(STRINGS.recipeNew.saveFailedTitle, message);
     } finally {
       setIsSubmitting(false);
     }
@@ -330,16 +331,16 @@ export default function NewRecipeScreen() {
 
     return new Promise<boolean>((resolve) => {
       Alert.alert(
-        "Replace current form?",
-        "Import will replace the current title, ingredients, and instructions.",
+        STRINGS.recipeNew.importReplaceTitle,
+        STRINGS.recipeNew.importReplaceBody,
         [
           {
-            text: "Cancel",
+            text: STRINGS.recipeNew.modalCancel,
             style: "cancel",
             onPress: () => resolve(false),
           },
           {
-            text: "Replace",
+            text: STRINGS.recipeNew.importReplaceConfirm,
             style: "destructive",
             onPress: () => resolve(true),
           },
@@ -362,8 +363,8 @@ export default function NewRecipeScreen() {
 
     if (!isSignedIn) {
       Alert.alert(
-        "Sign in required",
-        "Please sign in before importing a recipe.",
+        STRINGS.recipeNew.signInRequiredTitle,
+        STRINGS.recipeNew.importSignInBody,
       );
       return false;
     }
@@ -387,8 +388,8 @@ export default function NewRecipeScreen() {
       if (!response.ok) {
         const fallback =
           response.status === 422
-            ? "Could not parse a complete recipe. Try clearer source text."
-            : "Recipe import failed";
+            ? STRINGS.recipeNew.parseIncompleteRecipe
+            : STRINGS.recipeNew.importFailedTitle;
         const errorText = await response.text();
         throw new Error(parseApiErrorMessage(errorText, fallback));
       }
@@ -397,7 +398,7 @@ export default function NewRecipeScreen() {
       const parsedRecipe = parseScanRecipeResponse(json);
 
       if (!parsedRecipe) {
-        throw new Error("Received invalid import data from the server.");
+        throw new Error(STRINGS.recipeNew.importInvalidData);
       }
 
       setTitle(parsedRecipe.title);
@@ -407,8 +408,10 @@ export default function NewRecipeScreen() {
       return true;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to import recipe";
-      Alert.alert("Import failed", message);
+        error instanceof Error
+          ? error.message
+          : STRINGS.recipeNew.importFailedTitle;
+      Alert.alert(STRINGS.recipeNew.importFailedTitle, message);
       return false;
     } finally {
       setActiveImport(null);
@@ -420,7 +423,10 @@ export default function NewRecipeScreen() {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Please allow photo library access.");
+      Alert.alert(
+        STRINGS.recipeNew.permissionRequiredTitle,
+        STRINGS.recipeNew.allowPhotoLibrary,
+      );
       return;
     }
 
@@ -444,7 +450,10 @@ export default function NewRecipeScreen() {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Please allow photo library access.");
+      Alert.alert(
+        STRINGS.recipeNew.permissionRequiredTitle,
+        STRINGS.recipeNew.allowPhotoLibrary,
+      );
       return;
     }
 
@@ -463,7 +472,10 @@ export default function NewRecipeScreen() {
     const rawText = ocrResult.text?.trim() ?? "";
 
     if (!rawText) {
-      Alert.alert("Import failed", "No readable text was found in the photo.");
+      Alert.alert(
+        STRINGS.recipeNew.importFailedTitle,
+        STRINGS.recipeNew.noTextFound,
+      );
       return;
     }
 
@@ -477,7 +489,10 @@ export default function NewRecipeScreen() {
 
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Please allow camera access.");
+      Alert.alert(
+        STRINGS.recipeNew.permissionRequiredTitle,
+        STRINGS.recipeNew.allowCamera,
+      );
       return;
     }
 
@@ -497,7 +512,10 @@ export default function NewRecipeScreen() {
     const rawText = ocrResult.text?.trim() ?? "";
 
     if (!rawText) {
-      Alert.alert("Scan failed", "No readable text was found in the photo.");
+      Alert.alert(
+        STRINGS.recipeNew.scanFailedTitle,
+        STRINGS.recipeNew.noTextFound,
+      );
       return;
     }
 
@@ -514,7 +532,10 @@ export default function NewRecipeScreen() {
     const rawText = importText.trim();
 
     if (!rawText) {
-      Alert.alert("Text required", "Paste recipe text to import.");
+      Alert.alert(
+        STRINGS.recipeNew.textRequiredTitle,
+        STRINGS.recipeNew.textRequiredBody,
+      );
       return;
     }
 
@@ -534,7 +555,10 @@ export default function NewRecipeScreen() {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Please allow photo library access.");
+      Alert.alert(
+        STRINGS.recipeNew.permissionRequiredTitle,
+        STRINGS.recipeNew.allowPhotoLibrary,
+      );
       return;
     }
 
@@ -572,19 +596,19 @@ export default function NewRecipeScreen() {
               ]}
               onPress={() => router.back()}
             >
-              <ThemedText type="small">← Back</ThemedText>
+              <ThemedText type="small">{STRINGS.recipeNew.back}</ThemedText>
             </Pressable>
 
-            <ThemedText type="subtitle">New Recipe</ThemedText>
+            <ThemedText type="subtitle">{STRINGS.recipeNew.title}</ThemedText>
 
             <ThemedView
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Import
+                {STRINGS.recipeNew.importTitle}
               </ThemedText>
               <ThemedText themeColor="textSecondary">
-                Prefill the form from a photo or raw recipe text.
+                {STRINGS.recipeNew.importDescription}
               </ThemedText>
               <Pressable
                 style={[
@@ -599,8 +623,8 @@ export default function NewRecipeScreen() {
               >
                 <ThemedText type="smallBold">
                   {activeImport === "upload"
-                    ? "Importing..."
-                    : "Upload from device"}
+                    ? STRINGS.recipeNew.uploading
+                    : STRINGS.recipeNew.uploadFromDevice}
                 </ThemedText>
               </Pressable>
               <Pressable
@@ -615,7 +639,9 @@ export default function NewRecipeScreen() {
                 disabled={isImporting}
               >
                 <ThemedText type="smallBold">
-                  {activeImport === "scan" ? "Scanning..." : "Scan recipe"}
+                  {activeImport === "scan"
+                    ? STRINGS.recipeNew.scanning
+                    : STRINGS.recipeNew.scanRecipe}
                 </ThemedText>
               </Pressable>
               <Pressable
@@ -629,7 +655,9 @@ export default function NewRecipeScreen() {
                 onPress={openCreateFromTextModal}
                 disabled={isImporting}
               >
-                <ThemedText type="smallBold">Create from text</ThemedText>
+                <ThemedText type="smallBold">
+                  {STRINGS.recipeNew.createFromText}
+                </ThemedText>
               </Pressable>
             </ThemedView>
 
@@ -637,7 +665,7 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Title
+                {STRINGS.recipeNew.recipeTitle}
               </ThemedText>
               <TextInput
                 style={[
@@ -647,7 +675,7 @@ export default function NewRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Recipe title"
+                placeholder={STRINGS.recipeNew.recipeTitle}
                 placeholderTextColor={theme.textSecondary}
                 value={title}
                 onChangeText={setTitle}
@@ -658,10 +686,10 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Recipe Image
+                {STRINGS.recipeNew.recipeImage}
               </ThemedText>
               <ThemedText themeColor="textSecondary">
-                Choose the recipe image manually from your photo library.
+                {STRINGS.recipeNew.imageDescription}
               </ThemedText>
               <Pressable
                 style={[
@@ -673,7 +701,9 @@ export default function NewRecipeScreen() {
                 onPress={handlePickImage}
               >
                 <ThemedText type="smallBold">
-                  {image ? "Change image" : "Choose from photos"}
+                  {image
+                    ? STRINGS.recipeNew.changeImage
+                    : STRINGS.recipeNew.chooseImage}
                 </ThemedText>
               </Pressable>
               {image ? (
@@ -689,7 +719,7 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Recipe Video (Optional)
+                {STRINGS.recipeNew.recipeVideoOptional}
               </ThemedText>
               <Pressable
                 style={[
@@ -701,7 +731,9 @@ export default function NewRecipeScreen() {
                 onPress={handlePickVideo}
               >
                 <ThemedText type="smallBold">
-                  {video ? "Change Video" : "Upload Video From Device"}
+                  {video
+                    ? STRINGS.recipeNew.changeVideo
+                    : STRINGS.recipeNew.uploadVideo}
                 </ThemedText>
               </Pressable>
               {video ? (
@@ -713,7 +745,7 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Add Ingredient
+                {STRINGS.recipeNew.addIngredient}
               </ThemedText>
               <TextInput
                 style={[
@@ -723,7 +755,7 @@ export default function NewRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Amount"
+                placeholder={STRINGS.recipeNew.amountPlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={ingredientAmount}
                 onChangeText={setIngredientAmount}
@@ -756,7 +788,7 @@ export default function NewRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Ingredient name"
+                placeholder={STRINGS.recipeNew.ingredientNamePlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={ingredientName}
                 onChangeText={setIngredientName}
@@ -773,7 +805,9 @@ export default function NewRecipeScreen() {
                 disabled={!canAddIngredient}
                 onPress={handleAddIngredient}
               >
-                <ThemedText type="smallBold">Add Ingredient</ThemedText>
+                <ThemedText type="smallBold">
+                  {STRINGS.recipeNew.addIngredientButton}
+                </ThemedText>
               </Pressable>
             </ThemedView>
 
@@ -781,12 +815,12 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Ingredients
+                {STRINGS.recipeNew.ingredients}
               </ThemedText>
               <ThemedView style={styles.ingredientsList}>
                 {ingredients.length === 0 ? (
                   <ThemedText themeColor="textSecondary">
-                    No ingredients added yet.
+                    {STRINGS.recipeNew.noIngredients}
                   </ThemedText>
                 ) : (
                   ingredients.map((ingredient, index) => (
@@ -805,7 +839,9 @@ export default function NewRecipeScreen() {
                         ]}
                         onPress={() => handleRemoveIngredient(index)}
                       >
-                        <ThemedText type="smallBold">Remove</ThemedText>
+                        <ThemedText type="smallBold">
+                          {STRINGS.recipeNew.remove}
+                        </ThemedText>
                       </Pressable>
                     </ThemedView>
                   ))
@@ -817,7 +853,7 @@ export default function NewRecipeScreen() {
               style={[styles.field, { borderColor: theme.backgroundElement }]}
             >
               <ThemedText type="smallBold" themeColor="textSecondary">
-                Instructions
+                {STRINGS.recipeNew.instructions}
               </ThemedText>
               <TextInput
                 style={[
@@ -828,7 +864,7 @@ export default function NewRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
-                placeholder="Describe the steps..."
+                placeholder={STRINGS.recipeNew.instructionsPlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={instructions}
                 onChangeText={setInstructions}
@@ -850,7 +886,9 @@ export default function NewRecipeScreen() {
               onPress={handleSubmit}
             >
               <ThemedText type="smallBold">
-                {isSubmitting ? "Saving..." : "Save Recipe"}
+                {isSubmitting
+                  ? STRINGS.recipeNew.saving
+                  : STRINGS.recipeNew.save}
               </ThemedText>
             </Pressable>
 
@@ -885,10 +923,11 @@ export default function NewRecipeScreen() {
                         },
                       ]}
                     >
-                      <ThemedText type="smallBold">Create from text</ThemedText>
+                      <ThemedText type="smallBold">
+                        {STRINGS.recipeNew.modalTitle}
+                      </ThemedText>
                       <ThemedText themeColor="textSecondary">
-                        Paste recipe text to prefill title, ingredients, and
-                        instructions.
+                        {STRINGS.recipeNew.modalDescription}
                       </ThemedText>
                       <TextInput
                         style={[
@@ -899,7 +938,7 @@ export default function NewRecipeScreen() {
                             color: theme.text,
                           },
                         ]}
-                        placeholder="Paste raw recipe text..."
+                        placeholder={STRINGS.recipeNew.modalPlaceholder}
                         placeholderTextColor={theme.textSecondary}
                         value={importText}
                         onChangeText={setImportText}
@@ -916,7 +955,9 @@ export default function NewRecipeScreen() {
                           onPress={() => setIsTextImportModalVisible(false)}
                           disabled={activeImport === "text"}
                         >
-                          <ThemedText type="smallBold">Cancel</ThemedText>
+                          <ThemedText type="smallBold">
+                            {STRINGS.recipeNew.modalCancel}
+                          </ThemedText>
                         </Pressable>
                         <Pressable
                           style={[
@@ -933,8 +974,8 @@ export default function NewRecipeScreen() {
                         >
                           <ThemedText type="smallBold">
                             {activeImport === "text"
-                              ? "Importing..."
-                              : "Import"}
+                              ? STRINGS.recipeNew.modalImporting
+                              : STRINGS.recipeNew.modalImport}
                           </ThemedText>
                         </Pressable>
                       </ThemedView>

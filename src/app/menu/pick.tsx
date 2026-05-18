@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, Spacing } from "@/constants/theme";
 import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
@@ -41,8 +42,11 @@ export default function MenuPickScreen() {
   }, [getToken]);
 
   useEffect(() => {
-    const mealLabel = mealType === "LUNCH" ? "Lunch" : "Middag";
-    navigation.setOptions({ title: `Välj recept – ${mealLabel}` });
+    const mealLabel =
+      mealType === "LUNCH" ? STRINGS.menu.lunch : STRINGS.menu.dinner;
+    navigation.setOptions({
+      title: `${STRINGS.menuPick.titlePrefix} – ${mealLabel}`,
+    });
   }, [mealType, navigation]);
 
   useEffect(() => {
@@ -55,12 +59,16 @@ export default function MenuPickScreen() {
       setError(null);
       try {
         const res = await authorizedFetch("/me/recipes", getTokenRef.current);
-        if (!res.ok) throw new Error(`Kunde inte hämta recept (${res.status})`);
+        if (!res.ok) {
+          throw new Error(`${STRINGS.menuPick.fetchFailed} (${res.status})`);
+        }
         const data = (await res.json()) as ApiRecipe[];
         if (!cancelled) setRecipes(data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Något gick fel");
+          setError(
+            e instanceof Error ? e.message : STRINGS.menuPick.genericError,
+          );
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -85,7 +93,9 @@ export default function MenuPickScreen() {
           body: JSON.stringify({ recipeId }),
         },
       );
-      if (!res.ok) throw new Error(`Kunde inte spara (${res.status})`);
+      if (!res.ok) {
+        throw new Error(`${STRINGS.menuPick.saveFailed} (${res.status})`);
+      }
       const weekStartParam =
         typeof weekStart === "string" && weekStart.length > 0
           ? weekStart
@@ -94,7 +104,7 @@ export default function MenuPickScreen() {
         `/menu?weekStart=${weekStartParam}&refreshToken=${Date.now()}`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Något gick fel");
+      setError(e instanceof Error ? e.message : STRINGS.menuPick.genericError);
       setIsSaving(false);
     }
   }
@@ -126,7 +136,7 @@ export default function MenuPickScreen() {
           },
         ]}
       >
-        <ThemedText type="small">← Back</ThemedText>
+        <ThemedText type="small">{STRINGS.menuPick.back}</ThemedText>
       </Pressable>
       <FlatList
         data={recipes}
@@ -161,7 +171,7 @@ export default function MenuPickScreen() {
             </ThemedText>
           ) : (
             <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-              Inga sparade recept
+              {STRINGS.menuPick.empty}
             </ThemedText>
           )
         }
