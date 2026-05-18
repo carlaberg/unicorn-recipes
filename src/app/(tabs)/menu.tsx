@@ -2,13 +2,13 @@ import { useAuth } from "@clerk/clerk-expo";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -18,11 +18,11 @@ import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 import {
-    DAY_NAMES,
-    formatDateParam,
-    formatWeekRange,
-    getWeekStart,
-    isSameDay,
+  DAY_NAMES,
+  formatDateParam,
+  formatWeekRange,
+  getWeekStart,
+  isSameDay,
 } from "@/lib/date-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -178,6 +178,9 @@ export default function MenuScreen() {
   const [isCreating, setIsCreating] = useState(false);
   const [isReusingMenuId, setIsReusingMenuId] = useState<number | null>(null);
   const [menuNameInput, setMenuNameInput] = useState("");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedMenuName, setEditedMenuName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -236,6 +239,11 @@ export default function MenuScreen() {
     if (!refreshToken || Array.isArray(refreshToken)) return;
     fetchMenus(currentWeekStart);
   }, [refreshToken, currentWeekStart, fetchMenus]);
+
+  useEffect(() => {
+    setEditedMenuName(activeMenu?.name?.trim() ?? "");
+    setIsEditingName(false);
+  }, [activeMenu?.id, activeMenu?.name]);
 
   function navigateWeek(delta: number) {
     setCurrentWeekStart((prev) => {
@@ -318,6 +326,47 @@ export default function MenuScreen() {
     }
   }
 
+  async function saveMenuName() {
+    if (!activeMenu || isSavingName) return;
+
+    const trimmedName = editedMenuName.trim();
+    if (!trimmedName) {
+      setError("Menynamn kan inte vara tomt");
+      return;
+    }
+
+    setIsSavingName(true);
+    setError(null);
+
+    try {
+      const res = await authorizedFetch(
+        `/me/menus/${activeMenu.id}`,
+        getTokenRef.current,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmedName }),
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error(`Kunde inte uppdatera meny (${res.status})`);
+      }
+
+      const updatedMenu = (await res.json()) as WeeklyMenu;
+      setActiveMenu(updatedMenu);
+      setAllMenus((prev) =>
+        prev.map((menu) => (menu.id === updatedMenu.id ? updatedMenu : menu)),
+      );
+      setEditedMenuName(updatedMenu.name ?? "");
+      setIsEditingName(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Något gick fel");
+    } finally {
+      setIsSavingName(false);
+    }
+  }
+
   function handleAdd(dayOffset: number, mealType: MealType) {
     if (!activeMenu) return;
     router.push(
@@ -362,14 +411,56 @@ export default function MenuScreen() {
             <ThemedText type="subtitle" style={styles.weekLabel}>
               {formatWeekRange(currentWeekStart)}
             </ThemedText>
-            {!!activeMenu?.name && (
-              <ThemedText
-                themeColor="textSecondary"
-                style={styles.activeMenuName}
-              >
-                {activeMenu.name}
-              </ThemedText>
-            )}
+            {!!activeMenu &&
+              (isEditingName ? (
+                <View style={styles.editNameWrap}>
+                  <TextInput
+                    value={editedMenuName}
+                    onChangeText={setEditedMenuName}
+                    placeholder="Menynamn"
+                    placeholderTextColor={theme.textSecondary}
+                    style={[
+                      styles.editNameInput,
+                      {
+                        borderColor: theme.backgroundElement,
+                        color: theme.text,
+                      },
+                    ]}
+                  />
+                  <View style={styles.editNameActions}>
+                    <Pressable
+                      onPress={() => {
+                        setEditedMenuName(activeMenu.name?.trim() ?? "");
+                        setIsEditingName(false);
+                      }}
+                      disabled={isSavingName}
+                    >
+                      <ThemedText themeColor="textSecondary">Avbryt</ThemedText>
+                    </Pressable>
+                    <Pressable onPress={saveMenuName} disabled={isSavingName}>
+                      <ThemedText>
+                        {isSavingName ? "Sparar..." : "Spara"}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.activeNameWrap}>
+                  {!!activeMenu.name && (
+                    <ThemedText
+                      themeColor="textSecondary"
+                      style={styles.activeMenuName}
+                    >
+                      {activeMenu.name}
+                    </ThemedText>
+                  )}
+                  <Pressable onPress={() => setIsEditingName(true)}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Redigera
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ))}
           </View>
           <Pressable
             onPress={() => navigateWeek(1)}
@@ -496,6 +587,27 @@ const styles = StyleSheet.create({
   },
   activeMenuName: {
     textAlign: "center",
+  },
+  activeNameWrap: {
+    alignItems: "center",
+    gap: 2,
+  },
+  editNameWrap: {
+    width: "100%",
+    alignItems: "center",
+    gap: Spacing.one,
+  },
+  editNameInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    minHeight: 36,
+  },
+  editNameActions: {
+    flexDirection: "row",
+    gap: Spacing.three,
   },
   navArrow: {
     width: 36,
