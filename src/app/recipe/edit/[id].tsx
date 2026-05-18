@@ -26,12 +26,13 @@ import {
     Ingredient,
     IngredientUnit,
     ingredientUnits,
+    normalizeIngredientUnit,
 } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 
-function isIngredientUnit(value: string): value is IngredientUnit {
-  return ingredientUnits.includes(value as IngredientUnit);
+function toIngredientUnit(value: string) {
+  return normalizeIngredientUnit(value);
 }
 
 export default function EditRecipeScreen() {
@@ -99,14 +100,15 @@ export default function EditRecipeScreen() {
         setIngredients(
           loaded.ingredients
             .map((item) => {
-              if (!isIngredientUnit(item.unit)) {
+              const normalizedUnit = toIngredientUnit(item.unit);
+              if (!normalizedUnit) {
                 return null;
               }
 
               return {
                 name: item.ingredient.name,
-                amount: Number(item.amount),
-                unit: item.unit,
+                amount: Number(item.amount) * normalizedUnit.multiplier,
+                unit: normalizedUnit.unit,
               } as Ingredient;
             })
             .filter((value): value is Ingredient => value !== null),
@@ -305,13 +307,14 @@ export default function EditRecipeScreen() {
       const normalizedIngredients = normalizeIngredients(ingredients);
       const originalIngredients = recipe.ingredients
         .map((item) => {
-          if (!isIngredientUnit(item.unit)) {
+          const normalizedUnit = toIngredientUnit(item.unit);
+          if (!normalizedUnit) {
             return null;
           }
           return {
             name: item.ingredient.name,
-            amount: Number(item.amount),
-            unit: item.unit,
+            amount: Number(item.amount) * normalizedUnit.multiplier,
+            unit: normalizedUnit.unit,
           } as Ingredient;
         })
         .filter((value): value is Ingredient => value !== null);

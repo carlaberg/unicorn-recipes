@@ -5,18 +5,67 @@ export type User = {
 };
 
 export const ingredientUnits = [
-  "cups",
-  "tbsp",
-  "tsp",
   "g",
   "kg",
   "ml",
+  "cl",
+  "dl",
   "l",
-  "pieces",
-  "pinches",
+  "msk",
+  "tsk",
+  "krm",
+  "st",
+  "nypa",
 ] as const;
 
 export type IngredientUnit = (typeof ingredientUnits)[number];
+
+const ingredientUnitAliases: Record<
+  string,
+  { unit: IngredientUnit; multiplier?: number }
+> = {
+  g: { unit: "g" },
+  gram: { unit: "g" },
+  kg: { unit: "kg" },
+  kilo: { unit: "kg" },
+  kilogram: { unit: "kg" },
+  ml: { unit: "ml" },
+  cl: { unit: "cl" },
+  dl: { unit: "dl" },
+  l: { unit: "l" },
+  liter: { unit: "l" },
+  litre: { unit: "l" },
+  msk: { unit: "msk" },
+  matsked: { unit: "msk" },
+  tbsp: { unit: "msk" },
+  tsk: { unit: "tsk" },
+  tesked: { unit: "tsk" },
+  tsp: { unit: "tsk" },
+  krm: { unit: "krm" },
+  kryddmått: { unit: "krm" },
+  st: { unit: "st" },
+  stycken: { unit: "st" },
+  piece: { unit: "st" },
+  pieces: { unit: "st" },
+  pcs: { unit: "st" },
+  nypa: { unit: "nypa" },
+  pinch: { unit: "nypa" },
+  pinches: { unit: "nypa" },
+  cup: { unit: "dl", multiplier: 2.4 },
+  cups: { unit: "dl", multiplier: 2.4 },
+};
+
+export function normalizeIngredientUnit(rawUnit: string) {
+  const normalized = ingredientUnitAliases[rawUnit.trim().toLowerCase()];
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    unit: normalized.unit,
+    multiplier: normalized.multiplier ?? 1,
+  };
+}
 
 export type Ingredient = {
   name: string;
@@ -63,16 +112,16 @@ export const mockRecipes: Recipe[] = [
     video:
       "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
     ingredients: [
-      { name: "all-purpose flour", amount: 2, unit: "cups" },
-      { name: "sugar", amount: 2, unit: "tbsp" },
-      { name: "baking powder", amount: 1, unit: "tsp" },
-      { name: "baking soda", amount: 0.5, unit: "tsp" },
-      { name: "salt", amount: 0.5, unit: "tsp" },
-      { name: "buttermilk", amount: 2, unit: "cups" },
-      { name: "eggs", amount: 2, unit: "pieces" },
-      { name: "melted butter", amount: 3, unit: "tbsp" },
-      { name: "food coloring", amount: 3, unit: "pieces" },
-      { name: "whipped cream and rainbow sprinkles", amount: 1, unit: "cups" },
+      { name: "all-purpose flour", amount: 5, unit: "dl" },
+      { name: "sugar", amount: 2, unit: "msk" },
+      { name: "baking powder", amount: 1, unit: "tsk" },
+      { name: "baking soda", amount: 0.5, unit: "tsk" },
+      { name: "salt", amount: 0.5, unit: "tsk" },
+      { name: "buttermilk", amount: 5, unit: "dl" },
+      { name: "eggs", amount: 2, unit: "st" },
+      { name: "melted butter", amount: 3, unit: "msk" },
+      { name: "food coloring", amount: 3, unit: "st" },
+      { name: "whipped cream and rainbow sprinkles", amount: 2.5, unit: "dl" },
     ],
     instructions:
       "Mix dry ingredients in a large bowl. Whisk together buttermilk, eggs and butter in a separate bowl. Combine wet and dry ingredients until just mixed. Divide batter into three portions and colour each with food colouring. Heat a non-stick pan over medium heat. Pour small rounds of each colour side by side and cook until bubbles form. Flip and cook one more minute. Stack and top with whipped cream and sprinkles.",
@@ -84,13 +133,13 @@ export const mockRecipes: Recipe[] = [
     video:
       "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
     ingredients: [
-      { name: "frozen bananas", amount: 2, unit: "pieces" },
-      { name: "frozen mixed berries", amount: 1, unit: "cups" },
-      { name: "coconut milk", amount: 0.5, unit: "cups" },
-      { name: "fresh fruit for topping", amount: 1, unit: "cups" },
-      { name: "granola", amount: 0.5, unit: "cups" },
-      { name: "chia seeds", amount: 1, unit: "tbsp" },
-      { name: "honey", amount: 1, unit: "tbsp" },
+      { name: "frozen bananas", amount: 2, unit: "st" },
+      { name: "frozen mixed berries", amount: 2.5, unit: "dl" },
+      { name: "coconut milk", amount: 1.2, unit: "dl" },
+      { name: "fresh fruit for topping", amount: 2.5, unit: "dl" },
+      { name: "granola", amount: 1.2, unit: "dl" },
+      { name: "chia seeds", amount: 1, unit: "msk" },
+      { name: "honey", amount: 1, unit: "msk" },
     ],
     instructions:
       "Blend frozen bananas, berries and coconut milk until thick and smooth. Pour into a bowl. Arrange sliced fruit in rainbow rows on top. Sprinkle granola and chia seeds. Drizzle with honey and serve immediately.",
@@ -100,12 +149,12 @@ export const mockRecipes: Recipe[] = [
     title: "Glitter Lemonade",
     image: "https://picsum.photos/seed/lemonade/600/400",
     ingredients: [
-      { name: "lemons, juiced", amount: 4, unit: "pieces" },
-      { name: "cold water", amount: 4, unit: "cups" },
-      { name: "sugar", amount: 0.5, unit: "cups" },
-      { name: "butterfly pea flower tea (cooled)", amount: 0.5, unit: "cups" },
-      { name: "ice cubes", amount: 8, unit: "pieces" },
-      { name: "fresh mint for garnish", amount: 4, unit: "pieces" },
+      { name: "lemons, juiced", amount: 4, unit: "st" },
+      { name: "cold water", amount: 1, unit: "l" },
+      { name: "sugar", amount: 1.2, unit: "dl" },
+      { name: "butterfly pea flower tea (cooled)", amount: 1.2, unit: "dl" },
+      { name: "ice cubes", amount: 8, unit: "st" },
+      { name: "fresh mint for garnish", amount: 4, unit: "st" },
     ],
     instructions:
       "Make simple syrup by dissolving sugar in 1/2 cup hot water. Allow to cool. Mix lemon juice, simple syrup and cold water in a pitcher. Fill glasses with ice and pour lemonade. Slowly pour butterfly pea tea over the back of a spoon to create a colour-changing effect. Garnish with mint.",

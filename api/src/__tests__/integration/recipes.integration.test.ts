@@ -90,7 +90,7 @@ describe("Recipe API Integration Tests", () => {
           {
             name: "flour",
             amount: 2,
-            unit: "cups",
+            unit: "dl",
           },
         ],
       };
@@ -210,14 +210,14 @@ describe("Recipe API Integration Tests", () => {
         ingredients: [
           {
             amount: 1,
-            unit: "cups",
+            unit: "dl",
             ingredient: { name: "flour" },
           },
         ],
       } as any);
 
       const payload = {
-        ingredients: [{ name: "flour", amount: 1, unit: "cups" }],
+        ingredients: [{ name: "flour", amount: 1, unit: "dl" }],
       };
 
       const response = await app.inject({

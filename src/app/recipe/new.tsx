@@ -23,7 +23,12 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { STRINGS } from "@/constants/strings";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
-import { Ingredient, IngredientUnit, ingredientUnits } from "@/data/mock-data";
+import {
+  Ingredient,
+  IngredientUnit,
+  ingredientUnits,
+  normalizeIngredientUnit,
+} from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 
@@ -254,10 +259,14 @@ export default function NewRecipeScreen() {
           ? maybeIngredient.amount
           : Number(maybeIngredient.amount);
 
+      const normalizedUnit =
+        typeof maybeIngredient.unit === "string"
+          ? normalizeIngredientUnit(maybeIngredient.unit)
+          : null;
+
       if (
         typeof maybeIngredient.name !== "string" ||
-        typeof maybeIngredient.unit !== "string" ||
-        !ingredientUnits.includes(maybeIngredient.unit as IngredientUnit) ||
+        !normalizedUnit ||
         !Number.isFinite(amount) ||
         amount <= 0
       ) {
@@ -266,8 +275,8 @@ export default function NewRecipeScreen() {
 
       parsedIngredients.push({
         name: maybeIngredient.name.trim(),
-        amount,
-        unit: maybeIngredient.unit as IngredientUnit,
+        amount: amount * normalizedUnit.multiplier,
+        unit: normalizedUnit.unit,
       });
     }
 
