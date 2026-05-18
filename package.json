@@ -8,7 +8,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "db:status": "npm --prefix api run db:status",
+    "db:deploy": "npm --prefix api run db:deploy"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
