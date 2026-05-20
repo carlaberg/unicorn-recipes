@@ -4,6 +4,13 @@ import { z } from "zod";
 import { config } from "../config";
 import db from "../db";
 import { getUserIdFromRequest } from "../utils/auth";
+import {
+  applyAmountMultiplier,
+  canonicalIngredientUnits,
+  getAllowedUnitList,
+  normalizeIngredientName,
+  normalizeIngredientUnit,
+} from "../utils/ingredient-units";
 
 const recipeIngredientInputSchema = z.object({
   name: z.string().trim().min(1),
@@ -61,20 +68,6 @@ const scanRecipeBodySchema = z.object({
   rawText: z.string().trim().min(1),
 });
 
-const allowedIngredientUnits = [
-  "g",
-  "kg",
-  "ml",
-  "cl",
-  "dl",
-  "l",
-  "msk",
-  "tsk",
-  "krm",
-  "st",
-  "nypa",
-] as const;
-
 const scanRecipeResponseSchema = z.object({
   title: z.string().trim().min(1),
   instructions: z.string().trim().min(1),
@@ -82,7 +75,7 @@ const scanRecipeResponseSchema = z.object({
     z.object({
       name: z.string().trim().min(1),
       amount: z.coerce.number().nonnegative(),
-      unit: z.enum(allowedIngredientUnits),
+      unit: z.enum(canonicalIngredientUnits),
     }),
   ),
 });
@@ -155,7 +148,7 @@ function extractStructuredRecipe(
 }
 
 function buildScanPrompt(rawText: string) {
-  const units = allowedIngredientUnits.join(" | ");
+  const units = canonicalIngredientUnits.join(" | ");
   return [
     "Extract recipe data from OCR text.",
     "Return only valid minified JSON with this exact shape:",
@@ -375,6 +368,36 @@ async function fetchImageBuffer(url: string) {
   };
 }
 
+type IngredientInput = z.infer<typeof recipeIngredientInputSchema>;
+
+function normalizeRecipeIngredients(ingredients: IngredientInput[]) {
+  const normalized = [] as Array<{
+    name: string;
+    amount: number;
+    unit: (typeof canonicalIngredientUnits)[number];
+  }>;
+
+  for (const ingredient of ingredients) {
+    const normalizedUnit = normalizeIngredientUnit(ingredient.unit);
+    if (!normalizedUnit) {
+      return {
+        error: `Unsupported ingredient unit '${ingredient.unit}'. Allowed units and aliases map to: ${getAllowedUnitList()}`,
+      } as const;
+    }
+
+    normalized.push({
+      name: normalizeIngredientName(ingredient.name),
+      amount: applyAmountMultiplier(
+        ingredient.amount,
+        normalizedUnit.multiplier,
+      ),
+      unit: normalizedUnit.unit,
+    });
+  }
+
+  return { value: normalized } as const;
+}
+
 export async function recipeRoutes(app: FastifyInstance) {
   // GET /me/recipes
   app.get("/", async (request: FastifyRequest, reply: FastifyReply) => {
@@ -416,6 +439,13 @@ export async function recipeRoutes(app: FastifyInstance) {
         ingredients = [],
       } = parsedBody.data;
 
+      const normalizedIngredients = normalizeRecipeIngredients(ingredients);
+      if ("error" in normalizedIngredients) {
+        return reply.status(400).send({
+          message: normalizedIngredients.error,
+        });
+      }
+
       const recipe = await db.recipe.create({
         data: {
           name: (title ?? name) as string,
@@ -424,7 +454,7 @@ export async function recipeRoutes(app: FastifyInstance) {
           instructions,
           user: { connect: { id: userId } },
           ingredients: {
-            create: ingredients.map((ing: (typeof ingredients)[number]) => ({
+            create: normalizedIngredients.value.map((ing) => ({
               amount: ing.amount,
               unit: ing.unit,
               ingredient: {
@@ -709,6 +739,25 @@ export async function recipeRoutes(app: FastifyInstance) {
         parsedBody.data;
       const nextName = title ?? name;
 
+      let normalizedIngredientsValue:
+        | Array<{
+            name: string;
+            amount: number;
+            unit: (typeof canonicalIngredientUnits)[number];
+          }>
+        | undefined;
+
+      if (ingredients !== undefined) {
+        const normalizedIngredients = normalizeRecipeIngredients(ingredients);
+        if ("error" in normalizedIngredients) {
+          return reply.status(400).send({
+            message: normalizedIngredients.error,
+          });
+        }
+
+        normalizedIngredientsValue = normalizedIngredients.value;
+      }
+
       if (ingredients !== undefined) {
         await db.recipeIngredient.deleteMany({ where: { recipeId } });
       }
@@ -722,7 +771,7 @@ export async function recipeRoutes(app: FastifyInstance) {
           ...(instructions !== undefined && { instructions }),
           ...(ingredients !== undefined && {
             ingredients: {
-              create: ingredients.map((ing: (typeof ingredients)[number]) => ({
+              create: normalizedIngredientsValue!.map((ing) => ({
                 amount: ing.amount,
                 unit: ing.unit,
                 ingredient: {

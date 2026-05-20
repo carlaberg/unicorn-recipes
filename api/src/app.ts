@@ -2,6 +2,7 @@ import sensible from "@fastify/sensible";
 import Fastify, { FastifyInstance } from "fastify";
 import { menuRoutes } from "./routes/menu";
 import { recipeRoutes } from "./routes/recipes";
+import { shoppingRoutes } from "./routes/shopping";
 import { userRoutes } from "./routes/users";
 import { clerkWebhookRoutes } from "./routes/webhooks";
 import rawBody = require("fastify-raw-body");
@@ -23,6 +24,7 @@ export function buildApp(): FastifyInstance {
   app.register(userRoutes, { prefix: "/users" });
   app.register(recipeRoutes, { prefix: "/me/recipes" });
   app.register(menuRoutes, { prefix: "/me/menus" });
+  app.register(shoppingRoutes, { prefix: "/me/menus" });
 
   return app;
 }

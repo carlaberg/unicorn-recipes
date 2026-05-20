@@ -256,6 +256,16 @@ export default function MenuScreen() {
     });
   }
 
+  function openShoppingList() {
+    const startDate = formatDateParam(currentWeekStart);
+    const end = new Date(currentWeekStart);
+    end.setDate(currentWeekStart.getDate() + 6);
+    const endDate = formatDateParam(end);
+    router.push(
+      `/menu/shopping?startDate=${startDate}&endDate=${endDate}` as any,
+    );
+  }
+
   async function createMenu(sourceMenu?: WeeklyMenu) {
     if (sourceMenu) {
       setIsReusingMenuId(sourceMenu.id);
@@ -481,6 +491,16 @@ export default function MenuScreen() {
         </View>
 
         {/* Body */}
+        <Pressable
+          style={[
+            styles.shoppingButton,
+            { backgroundColor: theme.backgroundElement },
+          ]}
+          onPress={openShoppingList}
+        >
+          <ThemedText>{STRINGS.menu.shoppingList}</ThemedText>
+        </Pressable>
+
         {isLoading ? (
           <ActivityIndicator color={theme.text} style={styles.loader} />
         ) : error ? (
@@ -628,6 +648,13 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: Spacing.five,
+  },
+  shoppingButton: {
+    alignSelf: "center",
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 8,
+    marginBottom: Spacing.two,
   },
   emptyState: {
     alignItems: "center",

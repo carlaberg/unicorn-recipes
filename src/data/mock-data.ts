@@ -98,6 +98,26 @@ export type ApiRecipe = {
   ingredients: ApiIngredient[];
 };
 
+export type ApiShoppingListItem = {
+  ingredientName: string;
+  unit: string;
+  totalAmount: number;
+  recipeCount: number;
+  entryCount: number;
+};
+
+export type ApiShoppingListConflict = {
+  ingredientName: string;
+  units: string[];
+};
+
+export type ApiShoppingListResponse = {
+  startDate: string;
+  endDate: string;
+  items: ApiShoppingListItem[];
+  conflicts: ApiShoppingListConflict[];
+};
+
 export const mockUser: User = {
   id: "1",
   name: "Alex Johnson",

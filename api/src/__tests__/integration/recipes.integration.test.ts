@@ -116,6 +116,51 @@ describe("Recipe API Integration Tests", () => {
         }),
       );
     });
+
+    it("normalizes ingredient names and units before create", async () => {
+      vi.mocked(db.recipe.create).mockResolvedValue(mockRecipe as any);
+      const payload = {
+        title: "Test Recipe",
+        image: "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+        instructions: "Mix all ingredients and cook.",
+        ingredients: [
+          {
+            name: "  Sugar   ",
+            amount: 1,
+            unit: "cup",
+          },
+        ],
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/me/recipes/create",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(vi.mocked(db.recipe.create)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ingredients: {
+              create: [
+                {
+                  amount: 2.4,
+                  unit: "dl",
+                  ingredient: {
+                    connectOrCreate: {
+                      where: { name: "sugar" },
+                      create: { name: "sugar" },
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        }),
+      );
+    });
   });
 
   describe("GET /me/recipes/:recipeId", () => {
@@ -143,6 +188,23 @@ describe("Recipe API Integration Tests", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it("returns 400 when an unsupported ingredient unit is provided", async () => {
+      vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/me/recipes/1",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify({
+          ingredients: [{ name: "flour", amount: 1, unit: "ounces" }],
+        }),
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(vi.mocked(db.recipeIngredient.deleteMany)).not.toHaveBeenCalled();
+      expect(vi.mocked(db.recipe.update)).not.toHaveBeenCalled();
     });
   });
 
