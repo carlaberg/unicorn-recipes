@@ -604,6 +604,28 @@ export default function NewRecipeScreen() {
     }
   }
 
+  async function handleTakeVideo() {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert(
+        STRINGS.recipeNew.permissionRequiredTitle,
+        STRINGS.recipeNew.allowCamera,
+      );
+      return;
+    }
+
+    const cameraResult = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (!cameraResult.canceled && cameraResult.assets.length > 0) {
+      setVideo(cameraResult.assets[0].uri);
+    }
+  }
+
   return (
     <ThemedView style={styles.screen}>
       <KeyboardAvoidingView
@@ -778,6 +800,19 @@ export default function NewRecipeScreen() {
                   {video
                     ? STRINGS.recipeNew.changeVideo
                     : STRINGS.recipeNew.uploadVideo}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                  },
+                ]}
+                onPress={handleTakeVideo}
+              >
+                <ThemedText type="smallBold">
+                  {STRINGS.recipeNew.takeVideo}
                 </ThemedText>
               </Pressable>
               {video ? (
