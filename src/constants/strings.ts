@@ -122,6 +122,7 @@ export const STRINGS = {
     recipeTitle: "Recepttitel",
     recipeImage: "Receptbild",
     chooseImage: "Välj bild från bilder",
+    takePhoto: "Ta foto",
     changeImage: "Byt bild",
     recipeVideoOptional: "Receptvideo (valfritt)",
     uploadVideo: "Ladda upp video från enhet",
@@ -151,7 +152,7 @@ export const STRINGS = {
       "Import ersätter nuvarande titel, ingredienser och instruktioner.",
     importReplaceConfirm: "Ersätt",
     importSignInBody: "Logga in innan du importerar ett recept.",
-    imageDescription: "Välj receptbild manuellt från ditt bildbibliotek.",
+    imageDescription: "Välj receptbild från bildbiblioteket eller ta ett foto.",
     parseIncompleteRecipe:
       "Kunde inte tolka ett komplett recept. Försök med tydligare text.",
     importInvalidData: "Servern returnerade ogiltig importdata.",
@@ -173,6 +174,7 @@ export const STRINGS = {
     recipeImage: "Receptbild",
     changeImage: "Byt bild",
     chooseImage: "Välj bild från bilder",
+    takePhoto: "Ta foto",
     recipeVideoOptional: "Receptvideo (valfritt)",
     changeVideo: "Byt video",
     uploadVideo: "Ladda upp video från enhet",
@@ -198,5 +200,6 @@ export const STRINGS = {
     updateFailed: "Kunde inte uppdatera recept",
     permissionRequiredTitle: "Behörighet krävs",
     allowPhotoLibrary: "Tillåt åtkomst till bildbiblioteket.",
+    allowCamera: "Tillåt kameratkomst.",
   },
 } as const;

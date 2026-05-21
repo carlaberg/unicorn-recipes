@@ -454,6 +454,28 @@ export default function EditRecipeScreen() {
     }
   }
 
+  async function handleTakePhoto() {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert(
+        STRINGS.recipeEdit.permissionRequiredTitle,
+        STRINGS.recipeEdit.allowCamera,
+      );
+      return;
+    }
+
+    const cameraResult = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!cameraResult.canceled && cameraResult.assets.length > 0) {
+      setImage(cameraResult.assets[0].uri);
+    }
+  }
+
   async function handlePickVideo() {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -551,6 +573,19 @@ export default function EditRecipeScreen() {
                   {image
                     ? STRINGS.recipeEdit.changeImage
                     : STRINGS.recipeEdit.chooseImage}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                  },
+                ]}
+                onPress={handleTakePhoto}
+              >
+                <ThemedText type="smallBold">
+                  {STRINGS.recipeEdit.takePhoto}
                 </ThemedText>
               </Pressable>
               {image ? (
