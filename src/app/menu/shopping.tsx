@@ -8,6 +8,7 @@ import {
     StyleSheet,
     View,
 } from "react-native";
+import { Calendar } from "react-native-calendars";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -43,9 +44,49 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function parseDateParam(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatRangeLabel(startDate: string, endDate: string) {
+  return `${startDate} → ${endDate}`;
+}
+
 function formatAmountWithUnit(amount: number, unit: string) {
   const normalizedUnit = unit.trim().toLowerCase();
   return normalizedUnit === "st" ? `${amount}` : `${amount} ${unit}`;
+}
+
+function normalizeDateForRange(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function buildRangeMarkedDates(
+  startDateValue: Date,
+  endDateValue: Date,
+  rangeColor: string,
+  textColor: string,
+) {
+  const startKey = formatDateParam(startDateValue);
+  const endKey = formatDateParam(endDateValue);
+  const markedDates: Record<string, any> = {};
+
+  const current = new Date(startDateValue);
+  while (current <= endDateValue) {
+    const key = formatDateParam(current);
+    markedDates[key] = {
+      color: rangeColor,
+      textColor,
+      startingDay: key === startKey,
+      endingDay: key === endKey,
+    };
+    current.setDate(current.getDate() + 1);
+  }
+
+  return markedDates;
 }
 
 export default function ShoppingScreen() {
@@ -72,21 +113,70 @@ export default function ShoppingScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+  const [startDateValue, setStartDateValue] = useState<Date>(() =>
+    normalizeDateForRange(parseDateParam(startDate) ?? new Date()),
+  );
+  const [endDateValue, setEndDateValue] = useState<Date>(() =>
+    normalizeDateForRange(parseDateParam(endDate) ?? addDays(new Date(), 6)),
+  );
+  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
+  const [selectionPhase, setSelectionPhase] = useState<"start" | "end">(
+    "start",
+  );
 
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  function handleStartDateChange(days: number) {
-    const current = new Date(startDate);
-    const next = addDays(current, days);
-    setStartDate(formatDateParam(next));
+  async function applyRangeValues(nextStart: Date, nextEnd: Date) {
+    const nextStartDate = formatDateParam(nextStart);
+    const nextEndDate = formatDateParam(nextEnd);
+
+    if (nextStartDate > nextEndDate) {
+      setError(STRINGS.shopping.invalidDateRange);
+      return;
+    }
+
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
+    setIsCalendarVisible(false);
+    setSelectionPhase("start");
+    await fetchShoppingList(nextStartDate, nextEndDate);
   }
 
-  function handleEndDateChange(days: number) {
-    const current = new Date(endDate);
-    const next = addDays(current, days);
-    setEndDate(formatDateParam(next));
+  function toggleCalendar() {
+    setIsCalendarVisible((currentVisible) => {
+      const nextVisible = !currentVisible;
+      if (nextVisible) {
+        setSelectionPhase("start");
+      }
+      return nextVisible;
+    });
+  }
+
+  function handleCalendarDayPress(dateString: string) {
+    const selectedDate = normalizeDateForRange(new Date(dateString));
+    if (selectionPhase === "start") {
+      setStartDateValue(selectedDate);
+      setEndDateValue(selectedDate);
+      setSelectionPhase("end");
+      return;
+    }
+
+    if (selectedDate < startDateValue) {
+      const nextStart = selectedDate;
+      const nextEnd = normalizeDateForRange(startDateValue);
+      setStartDateValue(nextStart);
+      setEndDateValue(nextEnd);
+      setSelectionPhase("start");
+      void applyRangeValues(nextStart, nextEnd);
+    } else {
+      const nextStart = normalizeDateForRange(startDateValue);
+      const nextEnd = selectedDate;
+      setEndDateValue(nextEnd);
+      setSelectionPhase("start");
+      void applyRangeValues(nextStart, nextEnd);
+    }
   }
 
   function toggleItemChecked(ingredientName: string, unit: string) {
@@ -182,85 +272,54 @@ export default function ShoppingScreen() {
           {STRINGS.shopping.title}
         </ThemedText>
 
-        <View style={styles.formRow}>
-          <View style={styles.formField}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {STRINGS.shopping.startDate}
+        <View style={styles.rangeSummaryWrap}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {STRINGS.shopping.dateRange}
+          </ThemedText>
+          <ThemedText style={styles.rangeSummaryText}>
+            {formatRangeLabel(startDate, endDate)}
+          </ThemedText>
+          <Pressable
+            onPress={toggleCalendar}
+            style={[
+              styles.datePickerButton,
+              { backgroundColor: theme.backgroundElement },
+            ]}
+          >
+            <ThemedText>
+              {isCalendarVisible
+                ? STRINGS.shopping.hideRange
+                : STRINGS.shopping.changeRange}
             </ThemedText>
-            <View style={styles.datePickerRow}>
-              <Pressable
-                onPress={() => handleStartDateChange(-1)}
-                style={[
-                  styles.dateButton,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-              >
-                <ThemedText>−</ThemedText>
-              </Pressable>
-              <ThemedText
-                style={[
-                  styles.dateDisplay,
-                  { borderColor: theme.backgroundElement },
-                ]}
-              >
-                {startDate}
-              </ThemedText>
-              <Pressable
-                onPress={() => handleStartDateChange(1)}
-                style={[
-                  styles.dateButton,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-              >
-                <ThemedText>+</ThemedText>
-              </Pressable>
-            </View>
-          </View>
+          </Pressable>
 
-          <View style={styles.formField}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {STRINGS.shopping.endDate}
-            </ThemedText>
-            <View style={styles.datePickerRow}>
-              <Pressable
-                onPress={() => handleEndDateChange(-1)}
-                style={[
-                  styles.dateButton,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-              >
-                <ThemedText>−</ThemedText>
-              </Pressable>
-              <ThemedText
-                style={[
-                  styles.dateDisplay,
-                  { borderColor: theme.backgroundElement },
-                ]}
-              >
-                {endDate}
-              </ThemedText>
-              <Pressable
-                onPress={() => handleEndDateChange(1)}
-                style={[
-                  styles.dateButton,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-              >
-                <ThemedText>+</ThemedText>
-              </Pressable>
+          {isCalendarVisible ? (
+            <View style={styles.calendarWrap}>
+              <Calendar
+                current={formatDateParam(startDateValue)}
+                markingType="period"
+                markedDates={buildRangeMarkedDates(
+                  startDateValue,
+                  endDateValue,
+                  theme.backgroundElement,
+                  theme.text,
+                )}
+                onDayPress={(day) => handleCalendarDayPress(day.dateString)}
+                theme={{
+                  backgroundColor: theme.background,
+                  calendarBackground: theme.background,
+                  dayTextColor: theme.text,
+                  textDisabledColor: theme.textSecondary,
+                  monthTextColor: theme.text,
+                  textSectionTitleColor: theme.textSecondary,
+                  arrowColor: theme.text,
+                  todayTextColor: "#FF8A00",
+                }}
+                enableSwipeMonths
+              />
             </View>
-          </View>
+          ) : null}
         </View>
-
-        <Pressable
-          onPress={() => fetchShoppingList(startDate, endDate)}
-          style={[
-            styles.applyButton,
-            { backgroundColor: theme.backgroundElement },
-          ]}
-        >
-          <ThemedText>{STRINGS.shopping.applyRange}</ThemedText>
-        </Pressable>
 
         {isLoading ? (
           <ActivityIndicator color={theme.text} style={styles.loader} />
@@ -364,39 +423,22 @@ const styles = StyleSheet.create({
   title: {
     marginTop: Spacing.one,
   },
-  formRow: {
-    flexDirection: "row",
-    gap: Spacing.two,
-  },
-  formField: {
-    flex: 1,
+  rangeSummaryWrap: {
     gap: Spacing.one,
   },
-  datePickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.one,
+  rangeSummaryText: {
+    fontWeight: "600",
   },
-  dateButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 6,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  dateDisplay: {
-    flex: 1,
-    borderWidth: 1,
+  datePickerButton: {
     borderRadius: 8,
-    minHeight: 36,
-    paddingHorizontal: Spacing.two,
-    textAlign: "center",
-  },
-  applyButton: {
-    alignSelf: "flex-start",
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    borderRadius: 8,
+    alignSelf: "flex-start",
+  },
+  calendarWrap: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: Spacing.one,
   },
   loader: {
     marginTop: Spacing.four,
