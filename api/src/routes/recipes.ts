@@ -398,6 +398,10 @@ function normalizeRecipeIngredients(ingredients: IngredientInput[]) {
   return { value: normalized } as const;
 }
 
+function capitalizeRecipeTitle(title: string) {
+  return title.replace(/\b([a-z])/g, (letter) => letter.toUpperCase());
+}
+
 export async function recipeRoutes(app: FastifyInstance) {
   // GET /me/recipes
   app.get("/", async (request: FastifyRequest, reply: FastifyReply) => {
@@ -448,7 +452,7 @@ export async function recipeRoutes(app: FastifyInstance) {
 
       const recipe = await db.recipe.create({
         data: {
-          name: (title ?? name) as string,
+          name: capitalizeRecipeTitle((title ?? name) as string),
           image,
           video,
           instructions,
@@ -737,7 +741,12 @@ export async function recipeRoutes(app: FastifyInstance) {
 
       const { name, title, image, video, instructions, ingredients } =
         parsedBody.data;
-      const nextName = title ?? name;
+      const nextName =
+        title !== undefined
+          ? capitalizeRecipeTitle(title)
+          : name !== undefined
+            ? capitalizeRecipeTitle(name)
+            : undefined;
 
       let normalizedIngredientsValue:
         | Array<{

@@ -117,6 +117,32 @@ describe("Recipe API Integration Tests", () => {
       );
     });
 
+    it("capitalizes recipe title before create", async () => {
+      vi.mocked(db.recipe.create).mockResolvedValue(mockRecipe as any);
+      const payload = {
+        title: "test recipe",
+        image: "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+        instructions: "Mix all ingredients and cook.",
+        ingredients: [],
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/me/recipes/create",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(vi.mocked(db.recipe.create)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: "Test Recipe",
+          }),
+        }),
+      );
+    });
+
     it("normalizes ingredient names and units before create", async () => {
       vi.mocked(db.recipe.create).mockResolvedValue(mockRecipe as any);
       const payload = {
@@ -320,6 +346,30 @@ describe("Recipe API Integration Tests", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it("capitalizes recipe title before update", async () => {
+      vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+      vi.mocked(db.recipe.update).mockResolvedValue({
+        ...mockRecipe,
+        name: "Updated Recipe",
+      } as any);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/me/recipes/1",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify({ title: "updated recipe" }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(vi.mocked(db.recipe.update)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: "Updated Recipe",
+          }),
+        }),
+      );
     });
   });
 
