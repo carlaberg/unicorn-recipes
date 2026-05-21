@@ -820,8 +820,40 @@ export async function recipeRoutes(app: FastifyInstance) {
         return reply.notFound();
       }
 
+      await db.menuEntry.deleteMany({ where: { recipeId } });
       await db.recipeIngredient.deleteMany({ where: { recipeId } });
       await db.recipe.delete({ where: { id: recipeId } });
+
+      const cleanupUrls = [existing.image, existing.video]
+        .filter((value): value is string => typeof value === "string")
+        .filter((value) => value.trim().length > 0);
+
+      if (cleanupUrls.length > 0) {
+        const cleanupResults = await Promise.allSettled(
+          cleanupUrls.map((url) => deleteCloudinaryAssetByUrl(url)),
+        );
+
+        const failed = cleanupResults
+          .map((result, index) => ({ result, url: cleanupUrls[index] }))
+          .filter(
+            (entry): entry is { result: PromiseRejectedResult; url: string } =>
+              entry.result.status === "rejected",
+          )
+          .map((entry) => ({
+            url: entry.url,
+            reason:
+              entry.result.reason instanceof Error
+                ? entry.result.reason.message
+                : "Unknown cleanup error",
+          }));
+
+        if (failed.length > 0) {
+          request.log.error(
+            { failed },
+            "Cloudinary cleanup after recipe delete failed",
+          );
+        }
+      }
 
       return reply.status(204).send();
     },

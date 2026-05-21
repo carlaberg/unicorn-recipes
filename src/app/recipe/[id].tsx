@@ -4,6 +4,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Image,
     Pressable,
     ScrollView,
@@ -47,6 +48,7 @@ export default function RecipeDetailScreen() {
   const getTokenRef = useRef(getToken);
   const [recipe, setRecipe] = useState<ApiRecipe | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,6 +111,60 @@ export default function RecipeDetailScreen() {
     player.loop = false;
   });
 
+  function confirmDeleteRecipe() {
+    if (!recipe || isDeleting) {
+      return;
+    }
+
+    Alert.alert(
+      STRINGS.recipeDetail.deleteConfirmTitle,
+      STRINGS.recipeDetail.deleteConfirmBody,
+      [
+        {
+          text: STRINGS.recipeDetail.cancel,
+          style: "cancel",
+        },
+        {
+          text: STRINGS.recipeDetail.delete,
+          style: "destructive",
+          onPress: handleDeleteRecipe,
+        },
+      ],
+    );
+  }
+
+  async function handleDeleteRecipe() {
+    if (!recipe || isDeleting) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await authorizedFetch(
+        `/me/recipes/${recipe.id}`,
+        getTokenRef.current,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `${STRINGS.recipeDetail.deleteFailed} (${response.status})`,
+        );
+      }
+
+      router.replace("/recipes");
+    } catch (err) {
+      Alert.alert(
+        STRINGS.recipeDetail.deleteFailedTitle,
+        err instanceof Error ? err.message : STRINGS.recipeDetail.deleteFailed,
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <ThemedView style={styles.center}>
@@ -145,15 +201,36 @@ export default function RecipeDetailScreen() {
             >
               <ThemedText type="small">{STRINGS.recipeDetail.back}</ThemedText>
             </Pressable>
-            <Pressable
-              style={[
-                styles.editButton,
-                { backgroundColor: theme.backgroundElement },
-              ]}
-              onPress={() => router.push(`/recipe/edit/${recipe.id}`)}
-            >
-              <ThemedText type="small">{STRINGS.recipeDetail.edit}</ThemedText>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                style={[
+                  styles.editButton,
+                  { backgroundColor: theme.backgroundElement },
+                ]}
+                onPress={() => router.push(`/recipe/edit/${recipe.id}`)}
+              >
+                <ThemedText type="small">
+                  {STRINGS.recipeDetail.edit}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.deleteButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    opacity: isDeleting ? 0.7 : 1,
+                  },
+                ]}
+                onPress={confirmDeleteRecipe}
+                disabled={isDeleting}
+              >
+                <ThemedText type="small">
+                  {isDeleting
+                    ? STRINGS.recipeDetail.deleting
+                    : STRINGS.recipeDetail.delete}
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
 
           <ThemedText type="subtitle">{recipe.name}</ThemedText>
@@ -244,6 +321,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: Spacing.two,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.two,
+  },
+  deleteButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.three,
   },
   imageContainer: {
     width: "100%",

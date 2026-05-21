@@ -28,6 +28,9 @@ vi.mock("../../db", () => ({
     recipeIngredient: {
       deleteMany: vi.fn(),
     },
+    menuEntry: {
+      deleteMany: vi.fn(),
+    },
     ingredient: {
       upsert: vi.fn(),
     },
@@ -376,6 +379,9 @@ describe("Recipe API Integration Tests", () => {
   describe("DELETE /me/recipes/:recipeId", () => {
     it("returns 204 when recipe deleted", async () => {
       vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+      vi.mocked(db.menuEntry.deleteMany).mockResolvedValue({
+        count: 0,
+      } as any);
       vi.mocked(db.recipeIngredient.deleteMany).mockResolvedValue({
         count: 0,
       } as any);
@@ -388,6 +394,9 @@ describe("Recipe API Integration Tests", () => {
       });
 
       expect(response.statusCode).toBe(204);
+      expect(vi.mocked(db.menuEntry.deleteMany)).toHaveBeenCalledWith({
+        where: { recipeId: 1 },
+      });
     });
 
     it("returns 404 when recipe not found", async () => {
@@ -400,6 +409,46 @@ describe("Recipe API Integration Tests", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it("attempts to clean up Cloudinary image and video on delete", async () => {
+      vi.mocked(db.recipe.findFirst).mockResolvedValue(mockRecipe as any);
+      vi.mocked(db.menuEntry.deleteMany).mockResolvedValue({ count: 0 } as any);
+      vi.mocked(db.recipeIngredient.deleteMany).mockResolvedValue({
+        count: 0,
+      } as any);
+      vi.mocked(db.recipe.delete).mockResolvedValue(mockRecipe as any);
+
+      const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const originalApiKey = process.env.CLOUDINARY_API_KEY;
+      const originalApiSecret = process.env.CLOUDINARY_API_SECRET;
+
+      process.env.CLOUDINARY_CLOUD_NAME = "demo";
+      process.env.CLOUDINARY_API_KEY = "test-key";
+      process.env.CLOUDINARY_API_SECRET = "test-secret";
+
+      const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ result: "ok" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      try {
+        const response = await app.inject({
+          method: "DELETE",
+          url: "/me/recipes/1",
+          headers: { "x-user-id": "1" },
+        });
+
+        expect(response.statusCode).toBe(204);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        fetchMock.mockRestore();
+        process.env.CLOUDINARY_CLOUD_NAME = originalCloudName;
+        process.env.CLOUDINARY_API_KEY = originalApiKey;
+        process.env.CLOUDINARY_API_SECRET = originalApiSecret;
+      }
     });
   });
 });

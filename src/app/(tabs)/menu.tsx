@@ -3,6 +3,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -182,6 +183,7 @@ export default function MenuScreen() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedMenuName, setEditedMenuName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isDeletingMenu, setIsDeletingMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -384,6 +386,57 @@ export default function MenuScreen() {
     }
   }
 
+  function confirmDeleteMenu() {
+    if (!activeMenu || isDeletingMenu) {
+      return;
+    }
+
+    Alert.alert(
+      STRINGS.menu.deleteConfirmTitle,
+      STRINGS.menu.deleteConfirmBody,
+      [
+        {
+          text: STRINGS.menu.cancel,
+          style: "cancel",
+        },
+        {
+          text: STRINGS.menu.delete,
+          style: "destructive",
+          onPress: handleDeleteMenu,
+        },
+      ],
+    );
+  }
+
+  async function handleDeleteMenu() {
+    if (!activeMenu || isDeletingMenu) {
+      return;
+    }
+
+    setIsDeletingMenu(true);
+    setError(null);
+
+    try {
+      const res = await authorizedFetch(
+        `/me/menus/${activeMenu.id}`,
+        getTokenRef.current,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error(`${STRINGS.menu.deleteMenuFailed} (${res.status})`);
+      }
+
+      await fetchMenus(currentWeekStart);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : STRINGS.menu.deleteMenuFailed);
+    } finally {
+      setIsDeletingMenu(false);
+    }
+  }
+
   function handleAdd(dayOffset: number, mealType: MealType) {
     if (!activeMenu) return;
     router.push(
@@ -500,6 +553,23 @@ export default function MenuScreen() {
         >
           <ThemedText>{STRINGS.menu.shoppingList}</ThemedText>
         </Pressable>
+        {!!activeMenu && (
+          <Pressable
+            style={[
+              styles.deleteMenuButton,
+              {
+                backgroundColor: theme.backgroundElement,
+                opacity: isDeletingMenu ? 0.7 : 1,
+              },
+            ]}
+            onPress={confirmDeleteMenu}
+            disabled={isDeletingMenu}
+          >
+            <ThemedText>
+              {isDeletingMenu ? STRINGS.menu.deleting : STRINGS.menu.delete}
+            </ThemedText>
+          </Pressable>
+        )}
 
         {isLoading ? (
           <ActivityIndicator color={theme.text} style={styles.loader} />
@@ -655,6 +725,13 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: 8,
     marginBottom: Spacing.two,
+  },
+  deleteMenuButton: {
+    alignSelf: "center",
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 8,
+    marginBottom: Spacing.three,
   },
   emptyState: {
     alignItems: "center",

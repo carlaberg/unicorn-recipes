@@ -78,6 +78,12 @@ export const STRINGS = {
     createMenuFailed: "Kunde inte skapa meny",
     copyMenuFailed: "Kunde inte kopiera meny",
     updateMenuFailed: "Kunde inte uppdatera meny",
+    delete: "Ta bort meny",
+    deleting: "Tar bort meny...",
+    deleteConfirmTitle: "Ta bort meny?",
+    deleteConfirmBody:
+      "Menyn och alla dess valda recept för veckan kommer att tas bort.",
+    deleteMenuFailed: "Kunde inte ta bort meny",
     shoppingList: "Inköpslista",
   },
   shopping: {
@@ -103,6 +109,14 @@ export const STRINGS = {
   recipeDetail: {
     back: "← Tillbaka",
     edit: "Redigera",
+    delete: "Ta bort",
+    deleting: "Tar bort...",
+    cancel: "Avbryt",
+    deleteConfirmTitle: "Ta bort recept?",
+    deleteConfirmBody:
+      "Receptet tas bort från dina recept och från alla menyer där det används.",
+    deleteFailedTitle: "Kunde inte ta bort",
+    deleteFailed: "Kunde inte ta bort recept",
     notFound: "Recept hittades inte.",
     fetchFailed: "Kunde inte hämta recept",
     ingredients: "Ingredienser",
