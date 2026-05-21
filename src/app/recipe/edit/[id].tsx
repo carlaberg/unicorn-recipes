@@ -35,6 +35,10 @@ function toIngredientUnit(value: string) {
   return normalizeIngredientUnit(value);
 }
 
+function formatIngredientUnit(unit: string) {
+  return unit.trim().toLowerCase() === "st" ? "" : ` ${unit}`;
+}
+
 export default function EditRecipeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
@@ -759,7 +763,8 @@ export default function EditRecipeScreen() {
                       style={styles.ingredientRow}
                     >
                       <ThemedText type="small" style={styles.ingredientText}>
-                        • {ingredient.amount} {ingredient.unit}{" "}
+                        • {ingredient.amount}
+                        {formatIngredientUnit(ingredient.unit)}{" "}
                         {ingredient.name}
                       </ThemedText>
                       <Pressable

@@ -6,7 +6,7 @@ import {
     Pressable,
     ScrollView,
     StyleSheet,
-    View
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -41,6 +41,11 @@ function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
+}
+
+function formatAmountWithUnit(amount: number, unit: string) {
+  const normalizedUnit = unit.trim().toLowerCase();
+  return normalizedUnit === "st" ? `${amount}` : `${amount} ${unit}`;
 }
 
 export default function ShoppingScreen() {
@@ -307,7 +312,7 @@ export default function ShoppingScreen() {
                             isChecked && { textDecorationLine: "line-through" },
                           ]}
                         >
-                          {item.totalAmount} {item.unit}
+                          {formatAmountWithUnit(item.totalAmount, item.unit)}
                         </ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
                           {item.recipeCount} recipe

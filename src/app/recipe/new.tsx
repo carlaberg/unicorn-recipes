@@ -34,6 +34,10 @@ import { authorizedFetch } from "@/lib/api";
 
 type ImportSource = "upload" | "scan" | "text";
 
+function formatIngredientUnit(unit: string) {
+  return unit.trim().toLowerCase() === "st" ? "" : ` ${unit}`;
+}
+
 export default function NewRecipeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -908,7 +912,8 @@ export default function NewRecipeScreen() {
                       style={styles.ingredientRow}
                     >
                       <ThemedText type="small" style={styles.ingredientText}>
-                        • {ingredient.amount} {ingredient.unit}{" "}
+                        • {ingredient.amount}
+                        {formatIngredientUnit(ingredient.unit)}{" "}
                         {ingredient.name}
                       </ThemedText>
                       <Pressable

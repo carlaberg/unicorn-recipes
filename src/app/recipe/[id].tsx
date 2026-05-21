@@ -37,6 +37,10 @@ function getRecipeImageUrl(url: string) {
 }
 
 function formatIngredient(amount: number, unit: string, name: string) {
+  const normalizedUnit = unit.trim().toLowerCase();
+  if (normalizedUnit === "st") {
+    return `${amount} ${name}`;
+  }
   return `${amount} ${unit} ${name}`;
 }
 
