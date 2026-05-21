@@ -838,6 +838,19 @@ export default function NewRecipeScreen() {
                     color: theme.text,
                   },
                 ]}
+                placeholder={STRINGS.recipeNew.ingredientNamePlaceholder}
+                placeholderTextColor={theme.textSecondary}
+                value={ingredientName}
+                onChangeText={setIngredientName}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    color: theme.text,
+                  },
+                ]}
                 placeholder={STRINGS.recipeNew.amountPlaceholder}
                 placeholderTextColor={theme.textSecondary}
                 value={ingredientAmount}
@@ -863,19 +876,6 @@ export default function NewRecipeScreen() {
                   ))}
                 </Picker>
               </ThemedView>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                    color: theme.text,
-                  },
-                ]}
-                placeholder={STRINGS.recipeNew.ingredientNamePlaceholder}
-                placeholderTextColor={theme.textSecondary}
-                value={ingredientName}
-                onChangeText={setIngredientName}
-              />
               <Pressable
                 style={[
                   styles.addIngredientButton,
