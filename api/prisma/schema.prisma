@@ -58,11 +58,12 @@ model MenuEntry {
   weeklyMenuId Int
   dayOffset    Int
   mealType     MealType
-  recipeId     Int
+  recipeId     Int?
+  note         String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   weeklyMenu   WeeklyMenu @relation(fields: [weeklyMenuId], references: [id])
-  recipe       Recipe     @relation(fields: [recipeId], references: [id])
+  recipe       Recipe?    @relation(fields: [recipeId], references: [id])
 
   @@unique([weeklyMenuId, dayOffset, mealType])
 }

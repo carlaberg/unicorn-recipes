@@ -85,6 +85,7 @@ export const STRINGS = {
       "Menyn och alla dess valda recept för veckan kommer att tas bort.",
     deleteMenuFailed: "Kunde inte ta bort meny",
     shoppingList: "Inköpslista",
+    noteFallback: "Anteckning",
   },
   shopping: {
     back: "← Tillbaka",
@@ -104,6 +105,12 @@ export const STRINGS = {
   menuPick: {
     titlePrefix: "Välj recept",
     back: "← Tillbaka",
+    typeRecipe: "Recept",
+    typeNote: "Anteckning",
+    noteLabel: "Eller lägg till anteckning",
+    notePlaceholder: "Ex. Rester",
+    saveNote: "Spara anteckning",
+    noteRequired: "Skriv en anteckning först",
     fetchFailed: "Kunde inte hämta recept",
     saveFailed: "Kunde inte spara",
     empty: "Inga sparade recept",

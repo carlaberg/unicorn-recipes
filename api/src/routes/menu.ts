@@ -21,9 +21,15 @@ const updateMenuBodySchema = z
     path: ["name"],
   });
 
-const upsertEntryBodySchema = z.object({
-  recipeId: z.number().int().positive(),
-});
+const upsertEntryBodySchema = z
+  .object({
+    recipeId: z.number().int().positive().optional(),
+    note: z.string().trim().min(1).optional(),
+  })
+  .refine((v) => (v.recipeId === undefined) !== (v.note === undefined), {
+    message: "Provide exactly one of recipeId or note",
+    path: ["recipeId"],
+  });
 
 const validMealTypes = ["LUNCH", "DINNER"] as const;
 type MealTypeParam = (typeof validMealTypes)[number];
@@ -221,13 +227,15 @@ export async function menuRoutes(app: FastifyInstance) {
         );
       }
 
-      const { recipeId } = result.data;
+      const { recipeId, note } = result.data;
 
-      // Verify the recipe belongs to the user
-      const recipe = await db.recipe.findFirst({
-        where: { id: recipeId, userId },
-      });
-      if (!recipe) return reply.notFound("Recipe not found");
+      if (recipeId !== undefined) {
+        // Verify the recipe belongs to the user
+        const recipe = await db.recipe.findFirst({
+          where: { id: recipeId, userId },
+        });
+        if (!recipe) return reply.notFound("Recipe not found");
+      }
 
       const entry = await db.menuEntry.upsert({
         where: {
@@ -237,8 +245,17 @@ export async function menuRoutes(app: FastifyInstance) {
             mealType,
           },
         },
-        create: { weeklyMenuId: menuId, dayOffset, mealType, recipeId },
-        update: { recipeId },
+        create: {
+          weeklyMenuId: menuId,
+          dayOffset,
+          mealType,
+          recipeId: recipeId ?? null,
+          note: note ?? null,
+        },
+        update: {
+          recipeId: recipeId ?? null,
+          note: note ?? null,
+        },
         include: {
           recipe: { select: { id: true, name: true, image: true } },
         },

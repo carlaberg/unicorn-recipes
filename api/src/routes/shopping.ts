@@ -118,6 +118,10 @@ export async function shoppingRoutes(app: FastifyInstance) {
             continue;
           }
 
+          if (!entry.recipe) {
+            continue;
+          }
+
           for (const recipeIngredient of entry.recipe.ingredients) {
             const normalizedName = normalizeIngredientName(
               recipeIngredient.ingredient.name,

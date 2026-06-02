@@ -42,8 +42,9 @@ type MenuEntry = {
   weeklyMenuId: number;
   dayOffset: number;
   mealType: MealType;
-  recipeId: number;
-  recipe: MenuRecipe;
+  recipeId: number | null;
+  note: string | null;
+  recipe: MenuRecipe | null;
 };
 
 type WeeklyMenu = {
@@ -87,14 +88,26 @@ function MealSlot({
             { backgroundColor: theme.backgroundElement },
           ]}
         >
-          <Image
-            source={{ uri: entry.recipe.image }}
-            style={styles.slotImage}
-            resizeMode="cover"
-          />
-          <ThemedText type="small" style={styles.slotName} numberOfLines={1}>
-            {entry.recipe.name}
-          </ThemedText>
+          {entry.recipe ? (
+            <>
+              <Image
+                source={{ uri: entry.recipe.image }}
+                style={styles.slotImage}
+                resizeMode="cover"
+              />
+              <ThemedText
+                type="small"
+                style={styles.slotName}
+                numberOfLines={1}
+              >
+                {entry.recipe.name}
+              </ThemedText>
+            </>
+          ) : (
+            <ThemedText type="small" style={styles.slotName} numberOfLines={2}>
+              {entry.note || STRINGS.menu.noteFallback}
+            </ThemedText>
+          )}
           <Pressable onPress={onRemove} hitSlop={8} style={styles.removeButton}>
             <ThemedText type="small" themeColor="textSecondary">
               ×
@@ -295,13 +308,17 @@ export default function MenuScreen() {
 
       if (sourceMenu) {
         for (const entry of sourceMenu.menuEntries) {
+          const body = entry.recipeId
+            ? { recipeId: entry.recipeId }
+            : { note: entry.note ?? STRINGS.menu.noteFallback };
+
           const copyRes = await authorizedFetch(
             `/me/menus/${createdMenu.id}/${entry.dayOffset}/${entry.mealType}`,
             getTokenRef.current,
             {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ recipeId: entry.recipeId }),
+              body: JSON.stringify(body),
             },
           );
 

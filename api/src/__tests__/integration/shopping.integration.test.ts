@@ -84,6 +84,13 @@ describe("Shopping API Integration Tests", () => {
               ],
             },
           },
+          {
+            id: 103,
+            dayOffset: 2,
+            recipeId: null,
+            note: "Restmiddag",
+            recipe: null,
+          },
         ],
       },
     ] as any);

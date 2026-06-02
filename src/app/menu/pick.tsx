@@ -7,6 +7,7 @@ import {
     Image,
     Pressable,
     StyleSheet,
+    TextInput,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +19,8 @@ import { BottomTabInset, Spacing } from "@/constants/theme";
 import { ApiRecipe } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
+
+type EntryType = "RECIPE" | "NOTE";
 
 export default function MenuPickScreen() {
   const theme = useTheme();
@@ -36,6 +39,8 @@ export default function MenuPickScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noteInput, setNoteInput] = useState("");
+  const [entryType, setEntryType] = useState<EntryType>("RECIPE");
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -109,6 +114,42 @@ export default function MenuPickScreen() {
     }
   }
 
+  async function saveNote() {
+    if (isSaving) return;
+
+    const trimmedNote = noteInput.trim();
+    if (!trimmedNote) {
+      setError(STRINGS.menuPick.noteRequired);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await authorizedFetch(
+        `/me/menus/${menuId}/${dayOffset}/${mealType}`,
+        getTokenRef.current,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: trimmedNote }),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(`${STRINGS.menuPick.saveFailed} (${res.status})`);
+      }
+      const weekStartParam =
+        typeof weekStart === "string" && weekStart.length > 0
+          ? weekStart
+          : new Date().toISOString().slice(0, 10);
+      router.replace(
+        `/menu?weekStart=${weekStartParam}&refreshToken=${Date.now()}`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : STRINGS.menuPick.genericError);
+      setIsSaving(false);
+    }
+  }
+
   function handleBack() {
     const weekStartParam =
       typeof weekStart === "string" && weekStart.length > 0
@@ -138,44 +179,118 @@ export default function MenuPickScreen() {
       >
         <ThemedText type="small">{STRINGS.menuPick.back}</ThemedText>
       </Pressable>
-      <FlatList
-        data={recipes}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={[
-          styles.list,
-          {
-            paddingTop: 0,
-            paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
-          },
-        ]}
-        renderItem={({ item }) => (
+
+      <View
+        style={[styles.typeSelector, { borderColor: theme.backgroundElement }]}
+      >
+        <Pressable
+          onPress={() => setEntryType("RECIPE")}
+          style={[
+            styles.typeButton,
+            entryType === "RECIPE" && {
+              backgroundColor: theme.backgroundElement,
+            },
+          ]}
+        >
+          <ThemedText>{STRINGS.menuPick.typeRecipe}</ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => setEntryType("NOTE")}
+          style={[
+            styles.typeButton,
+            entryType === "NOTE" && {
+              backgroundColor: theme.backgroundElement,
+            },
+          ]}
+        >
+          <ThemedText>{STRINGS.menuPick.typeNote}</ThemedText>
+        </Pressable>
+      </View>
+
+      {entryType === "NOTE" ? (
+        <View
+          style={[
+            styles.noteSection,
+            {
+              paddingHorizontal: Spacing.three,
+              paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
+            },
+          ]}
+        >
+          <ThemedText type="small" themeColor="textSecondary">
+            {STRINGS.menuPick.noteLabel}
+          </ThemedText>
+          <TextInput
+            value={noteInput}
+            onChangeText={setNoteInput}
+            placeholder={STRINGS.menuPick.notePlaceholder}
+            placeholderTextColor={theme.textSecondary}
+            style={[
+              styles.noteInput,
+              {
+                borderColor: theme.backgroundElement,
+                color: theme.text,
+              },
+            ]}
+          />
           <Pressable
-            style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-            onPress={() => selectRecipe(item.id)}
+            style={[
+              styles.noteSaveButton,
+              { backgroundColor: theme.backgroundElement },
+            ]}
+            onPress={saveNote}
           >
-            <Image
-              source={{ uri: item.image }}
-              style={styles.cardImage}
-              resizeMode="cover"
-            />
-            <ThemedText style={styles.cardName}>{item.name}</ThemedText>
+            <ThemedText>{STRINGS.menuPick.saveNote}</ThemedText>
           </Pressable>
-        )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          isLoading ? (
-            <ActivityIndicator color={theme.text} style={styles.loader} />
-          ) : error ? (
+          {error ? (
             <ThemedText themeColor="textSecondary" style={styles.emptyText}>
               {error}
             </ThemedText>
-          ) : (
-            <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-              {STRINGS.menuPick.empty}
-            </ThemedText>
-          )
-        }
-      />
+          ) : null}
+        </View>
+      ) : (
+        <FlatList
+          data={recipes}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={[
+            styles.list,
+            {
+              paddingTop: 0,
+              paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
+            },
+          ]}
+          renderItem={({ item }) => (
+            <Pressable
+              style={[
+                styles.card,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+              onPress={() => selectRecipe(item.id)}
+            >
+              <Image
+                source={{ uri: item.image }}
+                style={styles.cardImage}
+                resizeMode="cover"
+              />
+              <ThemedText style={styles.cardName}>{item.name}</ThemedText>
+            </Pressable>
+          )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            isLoading ? (
+              <ActivityIndicator color={theme.text} style={styles.loader} />
+            ) : error ? (
+              <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+                {error}
+              </ThemedText>
+            ) : (
+              <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+                {STRINGS.menuPick.empty}
+              </ThemedText>
+            )
+          }
+        />
+      )}
     </ThemedView>
   );
 }
@@ -192,6 +307,39 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: Spacing.three,
+  },
+  typeSelector: {
+    flexDirection: "row",
+    marginHorizontal: Spacing.three,
+    marginBottom: Spacing.three,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 4,
+    gap: 4,
+  },
+  typeButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    paddingVertical: Spacing.two,
+  },
+  noteSection: {
+    gap: Spacing.two,
+    marginBottom: Spacing.two,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.two,
+    minHeight: 40,
+  },
+  noteSaveButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 8,
   },
   card: {
     flexDirection: "row",
