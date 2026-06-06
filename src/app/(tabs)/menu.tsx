@@ -64,11 +64,13 @@ function MealSlot({
   entry,
   onAdd,
   onRemove,
+  onOpenRecipe,
 }: {
   label: string;
   entry: MenuEntry | undefined;
   onAdd: () => void;
   onRemove: () => void;
+  onOpenRecipe: (entry: MenuEntry) => void;
 }) {
   const theme = useTheme();
 
@@ -89,7 +91,10 @@ function MealSlot({
           ]}
         >
           {entry.recipe ? (
-            <>
+            <Pressable
+              style={styles.slotContentButton}
+              onPress={() => onOpenRecipe(entry)}
+            >
               <Image
                 source={{ uri: entry.recipe.image }}
                 style={styles.slotImage}
@@ -102,7 +107,7 @@ function MealSlot({
               >
                 {entry.recipe.name}
               </ThemedText>
-            </>
+            </Pressable>
           ) : (
             <ThemedText type="small" style={styles.slotName} numberOfLines={2}>
               {entry.note || STRINGS.menu.noteFallback}
@@ -134,16 +139,16 @@ function DayRow({
   dayOffset,
   dayLabel,
   entries,
-  menuId,
   onAdd,
   onRemove,
+  onOpenRecipe,
 }: {
   dayOffset: number;
   dayLabel: string;
   entries: MenuEntry[];
-  menuId: number;
   onAdd: (dayOffset: number, mealType: MealType) => void;
   onRemove: (entry: MenuEntry) => void;
+  onOpenRecipe: (entry: MenuEntry) => void;
 }) {
   const theme = useTheme();
   const lunch = entries.find((e) => e.mealType === "LUNCH");
@@ -160,12 +165,14 @@ function DayRow({
           entry={lunch}
           onAdd={() => onAdd(dayOffset, "LUNCH")}
           onRemove={() => lunch && onRemove(lunch)}
+          onOpenRecipe={onOpenRecipe}
         />
         <MealSlot
           label={STRINGS.menu.dinner}
           entry={dinner}
           onAdd={() => onAdd(dayOffset, "DINNER")}
           onRemove={() => dinner && onRemove(dinner)}
+          onOpenRecipe={onOpenRecipe}
         />
       </View>
     </View>
@@ -461,6 +468,11 @@ export default function MenuScreen() {
     );
   }
 
+  function handleOpenRecipe(entry: MenuEntry) {
+    if (!entry.recipe) return;
+    router.push(`/recipe/${entry.recipe.id}` as any);
+  }
+
   const reusableMenus = allMenus.filter((menu) => {
     if (menu.menuEntries.length === 0) return false;
     if (!menu.startDate) return true;
@@ -667,9 +679,9 @@ export default function MenuScreen() {
               entries={activeMenu.menuEntries.filter(
                 (e) => e.dayOffset === index,
               )}
-              menuId={activeMenu.id}
               onAdd={handleAdd}
               onRemove={removeEntry}
+              onOpenRecipe={handleOpenRecipe}
             />
           ))
         )}
@@ -814,6 +826,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 8,
     padding: Spacing.two,
+    gap: Spacing.two,
+  },
+  slotContentButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.two,
   },
   slotImage: {
