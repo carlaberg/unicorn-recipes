@@ -51,6 +51,8 @@ type WeeklyMenu = {
   id: number;
   userId: number;
   name: string | null;
+  isTemplate?: boolean;
+  tags?: string[];
   startDate: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -191,15 +193,14 @@ export default function MenuScreen() {
     weekStart?: string;
   }>();
 
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() =>
-    getWeekStart(new Date()),
-  );
-  const [allMenus, setAllMenus] = useState<WeeklyMenu[]>([]);
-  const [activeMenu, setActiveMenu] = useState<WeeklyMenu | null>(null);
+  const [preferredWeekStart, setPreferredWeekStart] = useState<Date>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
+  const [menusInDateOrder, setMenusInDateOrder] = useState<WeeklyMenu[]>([]);
+  const [activeMenuIndex, setActiveMenuIndex] = useState<number>(-1);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [isReusingMenuId, setIsReusingMenuId] = useState<number | null>(null);
-  const [menuNameInput, setMenuNameInput] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedMenuName, setEditedMenuName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
@@ -216,35 +217,85 @@ export default function MenuScreen() {
     const parsed = new Date(weekStart);
     if (Number.isNaN(parsed.getTime())) return;
 
-    const nextWeekStart = getWeekStart(parsed);
-    setCurrentWeekStart((prev) =>
-      isSameDay(prev, nextWeekStart) ? prev : nextWeekStart,
-    );
+    parsed.setHours(0, 0, 0, 0);
+    setPreferredWeekStart((prev) => (isSameDay(prev, parsed) ? prev : parsed));
   }, [weekStart]);
 
+  const activeMenu =
+    activeMenuIndex >= 0 && activeMenuIndex < menusInDateOrder.length
+      ? menusInDateOrder[activeMenuIndex]
+      : null;
+
+  function sortMenusInDateOrder(menus: WeeklyMenu[]) {
+    return [...menus].sort((a, b) => {
+      if (!a.startDate && !b.startDate) return a.id - b.id;
+      if (!a.startDate) return 1;
+      if (!b.startDate) return -1;
+
+      const byDate =
+        new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      if (byDate !== 0) return byDate;
+      return a.id - b.id;
+    });
+  }
+
+  function isDateWithinWeek(date: Date, referenceDate: Date) {
+    const weekStart = getWeekStart(referenceDate);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const normalized = new Date(date);
+    normalized.setHours(0, 0, 0, 0);
+
+    return (
+      normalized.getTime() >= weekStart.getTime() &&
+      normalized.getTime() <= weekEnd.getTime()
+    );
+  }
+
   const fetchMenus = useCallback(
-    async (weekStart: Date) => {
+    async (weekStartToPrioritize: Date, keepMenuId?: number) => {
       if (!isLoaded || !isSignedIn) return;
 
       setIsLoading(true);
       setError(null);
 
       try {
-        const res = await authorizedFetch("/me/menus", getTokenRef.current);
+        const res = await authorizedFetch(
+          "/me/menus/planned",
+          getTokenRef.current,
+        );
         if (!res.ok) {
           throw new Error(`${STRINGS.menu.fetchMenusFailed} (${res.status})`);
         }
 
         const menus = (await res.json()) as WeeklyMenu[];
-        setAllMenus(menus);
+        const sortedMenus = sortMenusInDateOrder(menus);
+        setMenusInDateOrder(sortedMenus);
 
-        const match =
-          menus.find((m) => {
-            if (!m.startDate) return false;
-            return isSameDay(new Date(m.startDate), weekStart);
-          }) ?? null;
+        if (sortedMenus.length === 0) {
+          setActiveMenuIndex(-1);
+          return;
+        }
 
-        setActiveMenu(match);
+        if (keepMenuId !== undefined) {
+          const keepIndex = sortedMenus.findIndex(
+            (menu) => menu.id === keepMenuId,
+          );
+          if (keepIndex >= 0) {
+            setActiveMenuIndex(keepIndex);
+            return;
+          }
+        }
+
+        const currentWeekIndex = sortedMenus.findIndex((m) => {
+          if (!m.startDate) return false;
+          return isDateWithinWeek(new Date(m.startDate), weekStartToPrioritize);
+        });
+
+        setActiveMenuIndex(
+          currentWeekIndex >= 0 ? currentWeekIndex : sortedMenus.length - 1,
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
       } finally {
@@ -256,95 +307,42 @@ export default function MenuScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchMenus(currentWeekStart);
-    }, [fetchMenus, currentWeekStart]),
+      fetchMenus(preferredWeekStart, activeMenu?.id);
+    }, [fetchMenus, preferredWeekStart, activeMenu?.id]),
   );
 
   useEffect(() => {
     if (!refreshToken || Array.isArray(refreshToken)) return;
-    fetchMenus(currentWeekStart);
-  }, [refreshToken, currentWeekStart, fetchMenus]);
+    fetchMenus(preferredWeekStart, activeMenu?.id);
+  }, [refreshToken, preferredWeekStart, fetchMenus, activeMenu?.id]);
 
   useEffect(() => {
     setEditedMenuName(activeMenu?.name?.trim() ?? "");
     setIsEditingName(false);
   }, [activeMenu?.id, activeMenu?.name]);
 
-  function navigateWeek(delta: number) {
-    setCurrentWeekStart((prev) => {
-      const next = new Date(prev);
-      next.setDate(prev.getDate() + delta * 7);
+  function navigateMenu(delta: number) {
+    setActiveMenuIndex((prev) => {
+      if (menusInDateOrder.length === 0) return -1;
+      const current = prev < 0 ? 0 : prev;
+      const next = current + delta;
+      if (next < 0 || next >= menusInDateOrder.length) return current;
       return next;
     });
   }
 
   function openShoppingList() {
-    const startDate = formatDateParam(currentWeekStart);
-    const end = new Date(currentWeekStart);
-    end.setDate(currentWeekStart.getDate() + 6);
-    const endDate = formatDateParam(end);
-    router.push(
-      `/menu/shopping?startDate=${startDate}&endDate=${endDate}` as any,
-    );
+    if (!activeMenu) return;
+    router.push(`/menu/shopping?menuId=${activeMenu.id}` as any);
   }
 
-  async function createMenu(sourceMenu?: WeeklyMenu) {
-    if (sourceMenu) {
-      setIsReusingMenuId(sourceMenu.id);
-    } else {
-      setIsCreating(true);
-    }
-
-    try {
-      const typedName = menuNameInput.trim();
-      const menuName = typedName || sourceMenu?.name || undefined;
-
-      const res = await authorizedFetch("/me/menus", getTokenRef.current, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startDate: formatDateParam(currentWeekStart),
-          ...(menuName && { name: menuName }),
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`${STRINGS.menu.createMenuFailed} (${res.status})`);
-      }
-
-      const createdMenu = (await res.json()) as WeeklyMenu;
-
-      if (sourceMenu) {
-        for (const entry of sourceMenu.menuEntries) {
-          const body = entry.recipeId
-            ? { recipeId: entry.recipeId }
-            : { note: entry.note ?? STRINGS.menu.noteFallback };
-
-          const copyRes = await authorizedFetch(
-            `/me/menus/${createdMenu.id}/${entry.dayOffset}/${entry.mealType}`,
-            getTokenRef.current,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            },
-          );
-
-          if (!copyRes.ok) {
-            throw new Error(
-              `${STRINGS.menu.copyMenuFailed} (${copyRes.status})`,
-            );
-          }
-        }
-      }
-
-      setMenuNameInput("");
-      await fetchMenus(currentWeekStart);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
-    } finally {
-      setIsCreating(false);
-      setIsReusingMenuId(null);
-    }
+  function openPlanFlow() {
+    const weekStartForPlan = activeMenu?.startDate
+      ? new Date(activeMenu.startDate)
+      : preferredWeekStart;
+    router.push(
+      `/menu/plan?weekStart=${formatDateParam(weekStartForPlan)}` as any,
+    );
   }
 
   async function removeEntry(entry: MenuEntry) {
@@ -355,17 +353,21 @@ export default function MenuScreen() {
         getTokenRef.current,
         { method: "DELETE" },
       );
-      setActiveMenu((prev) =>
-        prev
-          ? {
-              ...prev,
-              menuEntries: prev.menuEntries.filter((e) => e.id !== entry.id),
-            }
-          : prev,
+      setMenusInDateOrder((prev) =>
+        prev.map((menu) =>
+          menu.id === activeMenu.id
+            ? {
+                ...menu,
+                menuEntries: menu.menuEntries.filter(
+                  (menuEntry) => menuEntry.id !== entry.id,
+                ),
+              }
+            : menu,
+        ),
       );
     } catch {
       // silent — re-fetch will reconcile
-      await fetchMenus(currentWeekStart);
+      await fetchMenus(preferredWeekStart, activeMenu?.id);
     }
   }
 
@@ -397,10 +399,12 @@ export default function MenuScreen() {
       }
 
       const updatedMenu = (await res.json()) as WeeklyMenu;
-      setActiveMenu(updatedMenu);
-      setAllMenus((prev) =>
-        prev.map((menu) => (menu.id === updatedMenu.id ? updatedMenu : menu)),
-      );
+      setMenusInDateOrder((prev) => {
+        const updated = prev.map((menu) =>
+          menu.id === updatedMenu.id ? updatedMenu : menu,
+        );
+        return sortMenusInDateOrder(updated);
+      });
       setEditedMenuName(updatedMenu.name ?? "");
       setIsEditingName(false);
     } catch (e) {
@@ -453,7 +457,7 @@ export default function MenuScreen() {
         throw new Error(`${STRINGS.menu.deleteMenuFailed} (${res.status})`);
       }
 
-      await fetchMenus(currentWeekStart);
+      await fetchMenus(preferredWeekStart);
     } catch (e) {
       setError(e instanceof Error ? e.message : STRINGS.menu.deleteMenuFailed);
     } finally {
@@ -464,26 +468,17 @@ export default function MenuScreen() {
   function handleAdd(dayOffset: number, mealType: MealType) {
     if (!activeMenu) return;
     router.push(
-      `/menu/pick?menuId=${activeMenu.id}&dayOffset=${dayOffset}&mealType=${mealType}&weekStart=${formatDateParam(currentWeekStart)}`,
+      `/menu/pick?menuId=${activeMenu.id}&dayOffset=${dayOffset}&mealType=${mealType}&weekStart=${formatDateParam(activeMenu.startDate ? new Date(activeMenu.startDate) : preferredWeekStart)}`,
     );
   }
+
+  const currentDisplayWeekStart = activeMenu?.startDate
+    ? new Date(activeMenu.startDate)
+    : preferredWeekStart;
 
   function handleOpenRecipe(entry: MenuEntry) {
     if (!entry.recipe) return;
     router.push(`/recipe/${entry.recipe.id}` as any);
-  }
-
-  const reusableMenus = allMenus.filter((menu) => {
-    if (menu.menuEntries.length === 0) return false;
-    if (!menu.startDate) return true;
-    return !isSameDay(new Date(menu.startDate), currentWeekStart);
-  });
-
-  function getMenuDisplayName(menu: WeeklyMenu) {
-    const baseName = menu.name?.trim() || STRINGS.menu.unnamedMenu;
-    if (!menu.startDate) return baseName;
-    const start = getWeekStart(new Date(menu.startDate));
-    return `${baseName} - ${formatWeekRange(start)}`;
   }
 
   return (
@@ -500,15 +495,19 @@ export default function MenuScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Pressable
-            onPress={() => navigateWeek(-1)}
+            onPress={() => navigateMenu(-1)}
             hitSlop={12}
-            style={styles.navArrow}
+            style={[
+              styles.navArrow,
+              activeMenuIndex <= 0 && styles.navArrowDisabled,
+            ]}
+            disabled={activeMenuIndex <= 0}
           >
             <ThemedText style={styles.arrowText}>‹</ThemedText>
           </Pressable>
           <View style={styles.weekLabelWrap}>
             <ThemedText type="subtitle" style={styles.weekLabel}>
-              {formatWeekRange(currentWeekStart)}
+              {formatWeekRange(currentDisplayWeekStart)}
             </ThemedText>
             {!!activeMenu &&
               (isEditingName ? (
@@ -564,24 +563,36 @@ export default function MenuScreen() {
               ))}
           </View>
           <Pressable
-            onPress={() => navigateWeek(1)}
+            onPress={() => navigateMenu(1)}
             hitSlop={12}
-            style={styles.navArrow}
+            style={[
+              styles.navArrow,
+              (activeMenuIndex < 0 ||
+                activeMenuIndex >= menusInDateOrder.length - 1) &&
+                styles.navArrowDisabled,
+            ]}
+            disabled={
+              activeMenuIndex < 0 ||
+              activeMenuIndex >= menusInDateOrder.length - 1
+            }
           >
             <ThemedText style={styles.arrowText}>›</ThemedText>
           </Pressable>
         </View>
 
         {/* Body */}
-        <Pressable
-          style={[
-            styles.shoppingButton,
-            { backgroundColor: theme.backgroundElement },
-          ]}
-          onPress={openShoppingList}
-        >
-          <ThemedText>{STRINGS.menu.shoppingList}</ThemedText>
-        </Pressable>
+
+        {!!activeMenu && (
+          <Pressable
+            style={[
+              styles.shoppingButton,
+              { backgroundColor: theme.backgroundElement },
+            ]}
+            onPress={openShoppingList}
+          >
+            <ThemedText>{STRINGS.menu.shoppingList}</ThemedText>
+          </Pressable>
+        )}
         {!!activeMenu && (
           <Pressable
             style={[
@@ -609,66 +620,29 @@ export default function MenuScreen() {
         ) : !activeMenu ? (
           <View style={styles.emptyState}>
             <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-              {STRINGS.menu.noMenuForWeek}
+              {STRINGS.menu.noPlannedMenuForWeek}
             </ThemedText>
-            <TextInput
-              value={menuNameInput}
-              onChangeText={setMenuNameInput}
-              placeholder={STRINGS.menu.menuNameOptionalPlaceholder}
-              placeholderTextColor={theme.textSecondary}
+            <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+              {STRINGS.menu.noPlannedMenuHelp}
+            </ThemedText>
+            <Pressable
+              onPress={openPlanFlow}
               style={[
-                styles.nameInput,
-                {
-                  borderColor: theme.backgroundElement,
-                  color: theme.text,
-                },
+                styles.createButton,
+                { backgroundColor: theme.backgroundElement },
               ]}
-            />
+            >
+              <ThemedText>{STRINGS.menu.planWeek}</ThemedText>
+            </Pressable>
             <Pressable
               style={[
                 styles.createButton,
                 { backgroundColor: theme.backgroundElement },
               ]}
-              onPress={() => createMenu()}
-              disabled={isCreating}
+              onPress={openPlanFlow}
             >
-              {isCreating ? (
-                <ActivityIndicator color={theme.text} />
-              ) : (
-                <ThemedText>{STRINGS.menu.createMenu}</ThemedText>
-              )}
+              <ThemedText>{STRINGS.menu.planWeek}</ThemedText>
             </Pressable>
-
-            {reusableMenus.length > 0 && (
-              <View style={styles.reuseSection}>
-                <ThemedText
-                  type="small"
-                  themeColor="textSecondary"
-                  style={styles.reuseTitle}
-                >
-                  {STRINGS.menu.reusePrevious}
-                </ThemedText>
-                {reusableMenus.map((menu) => (
-                  <Pressable
-                    key={menu.id}
-                    style={[
-                      styles.reuseButton,
-                      { backgroundColor: theme.backgroundElement },
-                    ]}
-                    onPress={() => createMenu(menu)}
-                    disabled={isReusingMenuId === menu.id}
-                  >
-                    {isReusingMenuId === menu.id ? (
-                      <ActivityIndicator color={theme.text} />
-                    ) : (
-                      <ThemedText style={styles.reuseButtonText}>
-                        {getMenuDisplayName(menu)}
-                      </ThemedText>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-            )}
           </View>
         ) : (
           DAY_NAMES.map((name, index) => (
@@ -686,6 +660,23 @@ export default function MenuScreen() {
           ))
         )}
       </ScrollView>
+
+      <Pressable
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.accent,
+            bottom: insets.bottom + BottomTabInset + Spacing.three,
+          },
+        ]}
+        onPress={openPlanFlow}
+        accessibilityRole="button"
+        accessibilityLabel={STRINGS.menu.createMenuFromDate}
+      >
+        <ThemedText style={[styles.fabLabel, { color: theme.accentText }]}>
+          +
+        </ThemedText>
+      </Pressable>
     </ThemedView>
   );
 }
@@ -704,6 +695,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: Spacing.three,
+  },
+  fab: {
+    position: "absolute",
+    right: Spacing.three,
+    borderRadius: 999,
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  fabLabel: {
+    fontSize: 34,
+    lineHeight: 34,
+    fontWeight: "500",
   },
   weekLabel: {
     textAlign: "center",
@@ -741,6 +751,9 @@ const styles = StyleSheet.create({
     width: 36,
     alignItems: "center",
   },
+  navArrowDisabled: {
+    opacity: 0.35,
+  },
   arrowText: {
     fontSize: 28,
     lineHeight: 32,
@@ -777,6 +790,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
+  },
+  startDateButton: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    gap: Spacing.one,
+  },
+  calendarWrap: {
+    width: "100%",
+    borderRadius: 12,
+    overflow: "hidden",
   },
   createButton: {
     paddingHorizontal: Spacing.four,

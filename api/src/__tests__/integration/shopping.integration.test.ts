@@ -5,6 +5,12 @@ vi.mock("../../db", () => ({
   default: {
     weeklyMenu: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    shoppingCheck: {
+      findMany: vi.fn(),
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
     },
   },
 }));
@@ -104,6 +110,7 @@ describe("Shopping API Integration Tests", () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as {
       items: Array<{
+        ingredientKey: string;
         ingredientName: string;
         unit: string;
         totalAmount: number;
@@ -115,6 +122,7 @@ describe("Shopping API Integration Tests", () => {
 
     expect(body.items).toEqual([
       {
+        ingredientKey: "salt::g",
         ingredientName: "salt",
         unit: "g",
         totalAmount: 5,
@@ -122,6 +130,7 @@ describe("Shopping API Integration Tests", () => {
         entryCount: 1,
       },
       {
+        ingredientKey: "salt::tsk",
         ingredientName: "salt",
         unit: "tsk",
         totalAmount: 1,
@@ -129,6 +138,7 @@ describe("Shopping API Integration Tests", () => {
         entryCount: 1,
       },
       {
+        ingredientKey: "sugar::dl",
         ingredientName: "sugar",
         unit: "dl",
         totalAmount: 4.4,
@@ -153,5 +163,55 @@ describe("Shopping API Integration Tests", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it("returns shopping list for a specific menu id", async () => {
+    vi.mocked(db.shoppingCheck.findMany).mockResolvedValue([] as any);
+
+    vi.mocked(db.weeklyMenu.findFirst).mockResolvedValue({
+      id: 1,
+      userId: 1,
+      name: "Week 25",
+      startDate: new Date("2026-06-15T00:00:00.000Z"),
+      menuEntries: [
+        {
+          id: 201,
+          dayOffset: 0,
+          recipeId: 50,
+          recipe: {
+            ingredients: [
+              {
+                amount: 2,
+                unit: "st",
+                ingredient: { name: "Ägg" },
+              },
+            ],
+          },
+        },
+      ],
+    } as any);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/me/menus/1/shopping",
+      headers: { "x-user-id": "1" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      startDate: string;
+      endDate: string;
+      checkedIngredientKeys: string[];
+      items: Array<{ ingredientName: string; totalAmount: number }>;
+    };
+
+    expect(body.startDate).toBe("2026-06-15");
+    expect(body.endDate).toBe("2026-06-21");
+    expect(body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ingredientName: "ägg", totalAmount: 2 }),
+      ]),
+    );
+    expect(body.checkedIngredientKeys).toEqual([]);
   });
 });

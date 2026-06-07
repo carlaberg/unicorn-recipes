@@ -130,25 +130,12 @@ export default function RecipesScreen() {
           styles.listContent,
           {
             paddingTop: insets.top + Spacing.four,
-            paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
+            paddingBottom: insets.bottom + BottomTabInset + Spacing.six,
           },
         ]}
         ListHeaderComponent={
           <ThemedView style={styles.header}>
-            <ThemedView style={styles.headerTopRow}>
-              <ThemedText type="subtitle">{STRINGS.recipes.title}</ThemedText>
-              <Pressable
-                style={[
-                  styles.addButton,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-                onPress={() => router.push("/recipe/new")}
-              >
-                <ThemedText type="small">
-                  {STRINGS.recipes.addRecipe}
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
+            <ThemedText type="subtitle">{STRINGS.recipes.title}</ThemedText>
           </ThemedView>
         }
         ListEmptyComponent={
@@ -164,6 +151,23 @@ export default function RecipesScreen() {
         }
         ItemSeparatorComponent={() => <ThemedView style={styles.separator} />}
       />
+
+      <Pressable
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.accent,
+            bottom: insets.bottom + BottomTabInset + Spacing.three,
+          },
+        ]}
+        onPress={() => router.push("/recipe/new")}
+        accessibilityRole="button"
+        accessibilityLabel={STRINGS.recipes.addRecipe}
+      >
+        <ThemedText style={[styles.fabLabel, { color: theme.accentText }]}>
+          +
+        </ThemedText>
+      </Pressable>
     </ThemedView>
   );
 }
@@ -189,15 +193,24 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     marginBottom: Spacing.four,
   },
-  headerTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  fab: {
+    position: "absolute",
+    right: Spacing.three,
+    borderRadius: 999,
+    width: 56,
+    height: 56,
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
-  addButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
+  fabLabel: {
+    fontSize: 34,
+    lineHeight: 34,
+    fontWeight: "500",
   },
   card: {
     borderRadius: Spacing.three,

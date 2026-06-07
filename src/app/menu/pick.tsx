@@ -28,11 +28,24 @@ export default function MenuPickScreen() {
   const navigation = useNavigation();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
-  const { menuId, dayOffset, mealType, weekStart } = useLocalSearchParams<{
+  const {
+    menuId,
+    dayOffset,
+    mealType,
+    weekStart,
+    returnTo,
+    templateId,
+    keepWeekContentOpen,
+    scrollY,
+  } = useLocalSearchParams<{
     menuId: string;
     dayOffset: string;
     mealType: string;
     weekStart?: string;
+    returnTo?: string;
+    templateId?: string;
+    keepWeekContentOpen?: string;
+    scrollY?: string;
   }>();
 
   const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
@@ -85,6 +98,22 @@ export default function MenuPickScreen() {
     };
   }, [isLoaded, isSignedIn]);
 
+  function getReturnHref() {
+    if (returnTo === "template") {
+      const id = typeof templateId === "string" ? templateId : menuId;
+      const keepWeekContentOpenParam =
+        typeof keepWeekContentOpen === "string" ? keepWeekContentOpen : "0";
+      const scrollYParam = typeof scrollY === "string" ? scrollY : "0";
+      return `/menu/template/${id}?refreshToken=${Date.now()}&keepWeekContentOpen=${keepWeekContentOpenParam}&scrollY=${scrollYParam}`;
+    }
+
+    const weekStartParam =
+      typeof weekStart === "string" && weekStart.length > 0
+        ? weekStart
+        : new Date().toISOString().slice(0, 10);
+    return `/menu?weekStart=${weekStartParam}&refreshToken=${Date.now()}`;
+  }
+
   async function selectRecipe(recipeId: number) {
     if (isSaving) return;
     setIsSaving(true);
@@ -101,13 +130,7 @@ export default function MenuPickScreen() {
       if (!res.ok) {
         throw new Error(`${STRINGS.menuPick.saveFailed} (${res.status})`);
       }
-      const weekStartParam =
-        typeof weekStart === "string" && weekStart.length > 0
-          ? weekStart
-          : new Date().toISOString().slice(0, 10);
-      router.replace(
-        `/menu?weekStart=${weekStartParam}&refreshToken=${Date.now()}`,
-      );
+      router.replace(getReturnHref() as any);
     } catch (e) {
       setError(e instanceof Error ? e.message : STRINGS.menuPick.genericError);
       setIsSaving(false);
@@ -137,13 +160,7 @@ export default function MenuPickScreen() {
       if (!res.ok) {
         throw new Error(`${STRINGS.menuPick.saveFailed} (${res.status})`);
       }
-      const weekStartParam =
-        typeof weekStart === "string" && weekStart.length > 0
-          ? weekStart
-          : new Date().toISOString().slice(0, 10);
-      router.replace(
-        `/menu?weekStart=${weekStartParam}&refreshToken=${Date.now()}`,
-      );
+      router.replace(getReturnHref() as any);
     } catch (e) {
       setError(e instanceof Error ? e.message : STRINGS.menuPick.genericError);
       setIsSaving(false);
@@ -151,6 +168,17 @@ export default function MenuPickScreen() {
   }
 
   function handleBack() {
+    if (returnTo === "template") {
+      const id = typeof templateId === "string" ? templateId : menuId;
+      const keepWeekContentOpenParam =
+        typeof keepWeekContentOpen === "string" ? keepWeekContentOpen : "0";
+      const scrollYParam = typeof scrollY === "string" ? scrollY : "0";
+      router.replace(
+        `/menu/template/${id}?keepWeekContentOpen=${keepWeekContentOpenParam}&scrollY=${scrollYParam}` as any,
+      );
+      return;
+    }
+
     const weekStartParam =
       typeof weekStart === "string" && weekStart.length > 0
         ? weekStart

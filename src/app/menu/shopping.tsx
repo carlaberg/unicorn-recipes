@@ -8,7 +8,6 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Calendar } from "react-native-calendars";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -22,32 +21,6 @@ import {
 } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
-import { formatDateParam, getWeekStart } from "@/lib/date-utils";
-
-function getDefaultRange() {
-  const start = getWeekStart(new Date());
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return {
-    startDate: formatDateParam(start),
-    endDate: formatDateParam(end),
-  };
-}
-
-function isValidDateInput(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function parseDateParam(value: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function formatRangeLabel(startDate: string, endDate: string) {
   return `${startDate} → ${endDate}`;
@@ -58,136 +31,59 @@ function formatAmountWithUnit(amount: number, unit: string) {
   return normalizedUnit === "st" ? `${amount}` : `${amount} ${unit}`;
 }
 
-function normalizeDateForRange(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function buildRangeMarkedDates(
-  startDateValue: Date,
-  endDateValue: Date,
-  rangeColor: string,
-  textColor: string,
-) {
-  const startKey = formatDateParam(startDateValue);
-  const endKey = formatDateParam(endDateValue);
-  const markedDates: Record<string, any> = {};
-
-  const current = new Date(startDateValue);
-  while (current <= endDateValue) {
-    const key = formatDateParam(current);
-    markedDates[key] = {
-      color: rangeColor,
-      textColor,
-      startingDay: key === startKey,
-      endingDay: key === endKey,
-    };
-    current.setDate(current.getDate() + 1);
-  }
-
-  return markedDates;
-}
-
 export default function ShoppingScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
-  const params = useLocalSearchParams<{
-    startDate?: string;
-    endDate?: string;
-  }>();
+  const params = useLocalSearchParams<{ menuId?: string }>();
 
-  const defaults = getDefaultRange();
-  const [startDate, setStartDate] = useState(
-    typeof params.startDate === "string"
-      ? params.startDate
-      : defaults.startDate,
-  );
-  const [endDate, setEndDate] = useState(
-    typeof params.endDate === "string" ? params.endDate : defaults.endDate,
-  );
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [items, setItems] = useState<ApiShoppingListItem[]>([]);
   const [conflicts, setConflicts] = useState<ApiShoppingListConflict[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
-  const [startDateValue, setStartDateValue] = useState<Date>(() =>
-    normalizeDateForRange(parseDateParam(startDate) ?? new Date()),
-  );
-  const [endDateValue, setEndDateValue] = useState<Date>(() =>
-    normalizeDateForRange(parseDateParam(endDate) ?? addDays(new Date(), 6)),
-  );
-  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
-  const [selectionPhase, setSelectionPhase] = useState<"start" | "end">(
-    "start",
-  );
+  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
 
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  async function applyRangeValues(nextStart: Date, nextEnd: Date) {
-    const nextStartDate = formatDateParam(nextStart);
-    const nextEndDate = formatDateParam(nextEnd);
-
-    if (nextStartDate > nextEndDate) {
-      setError(STRINGS.shopping.invalidDateRange);
+  async function toggleItemChecked(ingredientKey: string) {
+    if (!activeMenuId) {
       return;
     }
 
-    setStartDate(nextStartDate);
-    setEndDate(nextEndDate);
-    setIsCalendarVisible(false);
-    setSelectionPhase("start");
-    await fetchShoppingList(nextStartDate, nextEndDate);
-  }
+    const currentlyChecked = checkedItems.has(ingredientKey);
+    const nextChecked = !currentlyChecked;
 
-  function toggleCalendar() {
-    setIsCalendarVisible((currentVisible) => {
-      const nextVisible = !currentVisible;
-      if (nextVisible) {
-        setSelectionPhase("start");
+    const optimistic = new Set(checkedItems);
+    if (nextChecked) {
+      optimistic.add(ingredientKey);
+    } else {
+      optimistic.delete(ingredientKey);
+    }
+    setCheckedItems(optimistic);
+
+    try {
+      const response = await authorizedFetch(
+        `/me/menus/${activeMenuId}/shopping/check`,
+        getTokenRef.current,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ingredientKey, checked: nextChecked }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`${STRINGS.shopping.fetchFailed} (${response.status})`);
       }
-      return nextVisible;
-    });
-  }
-
-  function handleCalendarDayPress(dateString: string) {
-    const selectedDate = normalizeDateForRange(new Date(dateString));
-    if (selectionPhase === "start") {
-      setStartDateValue(selectedDate);
-      setEndDateValue(selectedDate);
-      setSelectionPhase("end");
-      return;
+    } catch {
+      setCheckedItems(new Set(checkedItems));
     }
-
-    if (selectedDate < startDateValue) {
-      const nextStart = selectedDate;
-      const nextEnd = normalizeDateForRange(startDateValue);
-      setStartDateValue(nextStart);
-      setEndDateValue(nextEnd);
-      setSelectionPhase("start");
-      void applyRangeValues(nextStart, nextEnd);
-    } else {
-      const nextStart = normalizeDateForRange(startDateValue);
-      const nextEnd = selectedDate;
-      setEndDateValue(nextEnd);
-      setSelectionPhase("start");
-      void applyRangeValues(nextStart, nextEnd);
-    }
-  }
-
-  function toggleItemChecked(ingredientName: string, unit: string) {
-    const key = `${ingredientName}-${unit}`;
-    const newChecked = new Set(checkedItems);
-    if (newChecked.has(key)) {
-      newChecked.delete(key);
-    } else {
-      newChecked.add(key);
-    }
-    setCheckedItems(newChecked);
   }
 
   function groupByIngredient() {
@@ -201,18 +97,8 @@ export default function ShoppingScreen() {
     return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
   }
 
-  async function fetchShoppingList(nextStartDate: string, nextEndDate: string) {
+  async function fetchShoppingList(menuId: number) {
     if (!isLoaded || !isSignedIn) {
-      return;
-    }
-
-    if (!isValidDateInput(nextStartDate) || !isValidDateInput(nextEndDate)) {
-      setError(STRINGS.shopping.invalidDateRange);
-      return;
-    }
-
-    if (nextStartDate > nextEndDate) {
-      setError(STRINGS.shopping.invalidDateRange);
       return;
     }
 
@@ -222,7 +108,7 @@ export default function ShoppingScreen() {
 
     try {
       const response = await authorizedFetch(
-        `/me/menus/shopping?startDate=${nextStartDate}&endDate=${nextEndDate}`,
+        `/me/menus/${menuId}/shopping`,
         getTokenRef.current,
       );
 
@@ -231,9 +117,15 @@ export default function ShoppingScreen() {
       }
 
       const data = (await response.json()) as ApiShoppingListResponse;
+      setActiveMenuId(menuId);
+      setStartDate(data.startDate);
+      setEndDate(data.endDate);
       setItems(data.items);
       setConflicts(data.conflicts);
+      setCheckedItems(new Set(data.checkedIngredientKeys ?? []));
     } catch (e) {
+      setStartDate("");
+      setEndDate("");
       setItems([]);
       setConflicts([]);
       setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
@@ -243,9 +135,15 @@ export default function ShoppingScreen() {
   }
 
   useEffect(() => {
-    fetchShoppingList(startDate, endDate);
+    const menuId = parseInt(String(params.menuId ?? ""), 10);
+    if (isNaN(menuId)) {
+      setIsLoading(false);
+      setError(STRINGS.shopping.missingMenuId);
+      return;
+    }
+    fetchShoppingList(menuId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, params.menuId]);
 
   return (
     <ThemedView style={styles.container}>
@@ -274,51 +172,11 @@ export default function ShoppingScreen() {
 
         <View style={styles.rangeSummaryWrap}>
           <ThemedText type="small" themeColor="textSecondary">
-            {STRINGS.shopping.dateRange}
+            {STRINGS.shopping.menuPeriod}
           </ThemedText>
           <ThemedText style={styles.rangeSummaryText}>
-            {formatRangeLabel(startDate, endDate)}
+            {startDate && endDate ? formatRangeLabel(startDate, endDate) : "-"}
           </ThemedText>
-          <Pressable
-            onPress={toggleCalendar}
-            style={[
-              styles.datePickerButton,
-              { backgroundColor: theme.backgroundElement },
-            ]}
-          >
-            <ThemedText>
-              {isCalendarVisible
-                ? STRINGS.shopping.hideRange
-                : STRINGS.shopping.changeRange}
-            </ThemedText>
-          </Pressable>
-
-          {isCalendarVisible ? (
-            <View style={styles.calendarWrap}>
-              <Calendar
-                current={formatDateParam(startDateValue)}
-                markingType="period"
-                markedDates={buildRangeMarkedDates(
-                  startDateValue,
-                  endDateValue,
-                  theme.backgroundElement,
-                  theme.text,
-                )}
-                onDayPress={(day) => handleCalendarDayPress(day.dateString)}
-                theme={{
-                  backgroundColor: theme.background,
-                  calendarBackground: theme.background,
-                  dayTextColor: theme.text,
-                  textDisabledColor: theme.textSecondary,
-                  monthTextColor: theme.text,
-                  textSectionTitleColor: theme.textSecondary,
-                  arrowColor: theme.text,
-                  todayTextColor: "#FF8A00",
-                }}
-                enableSwipeMonths
-              />
-            </View>
-          ) : null}
         </View>
 
         {isLoading ? (
@@ -339,14 +197,12 @@ export default function ShoppingScreen() {
                   {ingredientName}
                 </ThemedText>
                 {ingredientItems.map((item) => {
-                  const key = `${item.ingredientName}-${item.unit}`;
+                  const key = item.ingredientKey;
                   const isChecked = checkedItems.has(key);
                   return (
                     <Pressable
                       key={key}
-                      onPress={() =>
-                        toggleItemChecked(ingredientName, item.unit)
-                      }
+                      onPress={() => toggleItemChecked(item.ingredientKey)}
                       style={[
                         styles.itemRow,
                         {
@@ -428,17 +284,6 @@ const styles = StyleSheet.create({
   },
   rangeSummaryText: {
     fontWeight: "600",
-  },
-  datePickerButton: {
-    borderRadius: 8,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    alignSelf: "flex-start",
-  },
-  calendarWrap: {
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: Spacing.one,
   },
   loader: {
     marginTop: Spacing.four,

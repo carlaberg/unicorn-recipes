@@ -5,6 +5,7 @@ vi.mock("../../db", () => ({
   default: {
     weeklyMenu: {
       findFirst: vi.fn(),
+      create: vi.fn(),
     },
     recipe: {
       findFirst: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock("../../db", () => ({
     menuEntry: {
       upsert: vi.fn(),
       deleteMany: vi.fn(),
+      createMany: vi.fn(),
     },
   },
 }));
@@ -79,5 +81,59 @@ describe("Menu API Integration Tests", () => {
 
     expect(response.statusCode).toBe(400);
     expect(vi.mocked(db.menuEntry.upsert)).not.toHaveBeenCalled();
+  });
+
+  it("creates a planned menu from a template menu", async () => {
+    vi.mocked(db.weeklyMenu.findFirst)
+      .mockResolvedValueOnce({
+        id: 10,
+        userId: 1,
+        name: "Meny Mall",
+        menuEntries: [
+          {
+            dayOffset: 0,
+            mealType: "LUNCH",
+            recipeId: 22,
+            note: null,
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce({
+        id: 11,
+        userId: 1,
+        name: "Meny Mall",
+        startDate: new Date("2026-06-15"),
+        menuEntries: [],
+      } as any);
+
+    vi.mocked(db.weeklyMenu.create).mockResolvedValue({
+      id: 11,
+      userId: 1,
+      name: "Meny Mall",
+      startDate: new Date("2026-06-15"),
+    } as any);
+
+    vi.mocked(db.menuEntry.createMany).mockResolvedValue({ count: 1 } as any);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/me/menus/plan",
+      headers: { "x-user-id": "1", "content-type": "application/json" },
+      body: JSON.stringify({
+        templateMenuId: 10,
+        startDate: "2026-06-15",
+      }),
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(vi.mocked(db.weeklyMenu.create)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 1,
+          startDate: new Date("2026-06-15"),
+        }),
+      }),
+    );
+    expect(vi.mocked(db.menuEntry.createMany)).toHaveBeenCalled();
   });
 });

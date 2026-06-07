@@ -26,6 +26,7 @@ model User {
   updatedAt    DateTime      @updatedAt
   recipes      Recipe[]
   weeklyMenus  WeeklyMenu[]
+  shoppingChecks ShoppingCheck[]
 }
 
 model Recipe {
@@ -46,11 +47,14 @@ model WeeklyMenu {
   id          Int         @id @default(autoincrement())
   userId      Int
   name        String?
+  isTemplate  Boolean     @default(false)
+  tags        String[]    @default([])
   startDate   DateTime?   @db.Date
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   user        User        @relation(fields: [userId], references: [id])
   menuEntries MenuEntry[]
+  checks      ShoppingCheck[]
 }
 
 model MenuEntry {
@@ -86,4 +90,18 @@ model RecipeIngredient {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   @@id([recipeId, ingredientId])
+}
+
+model ShoppingCheck {
+  id            Int       @id @default(autoincrement())
+  weeklyMenuId  Int
+  userId        Int
+  ingredientKey String
+  checkedAt     DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  weeklyMenu    WeeklyMenu @relation(fields: [weeklyMenuId], references: [id])
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@unique([weeklyMenuId, userId, ingredientKey])
 }

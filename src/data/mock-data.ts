@@ -99,6 +99,7 @@ export type ApiRecipe = {
 };
 
 export type ApiShoppingListItem = {
+  ingredientKey: string;
   ingredientName: string;
   unit: string;
   totalAmount: number;
@@ -116,6 +117,7 @@ export type ApiShoppingListResponse = {
   endDate: string;
   items: ApiShoppingListItem[];
   conflicts: ApiShoppingListConflict[];
+  checkedIngredientKeys?: string[];
 };
 
 export const mockUser: User = {

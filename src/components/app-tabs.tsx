@@ -15,14 +15,6 @@ export default function AppTabs() {
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.text } }}
     >
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>{STRINGS.tabs.home}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require("@/assets/images/tabIcons/home.png")}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="recipes">
         <NativeTabs.Trigger.Label>
           {STRINGS.tabs.recipes}
@@ -43,12 +35,25 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="library">
+        <NativeTabs.Trigger.Label>
+          {STRINGS.tabs.menuLibrary}
+        </NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "menucard", selected: "menucard.fill" }}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="account">
         <NativeTabs.Trigger.Label>
           {STRINGS.tabs.account}
         </NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require("@/assets/images/tabIcons/account.png")}
+          sf={{
+            default: "person.crop.circle",
+            selected: "person.crop.circle.fill",
+          }}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
