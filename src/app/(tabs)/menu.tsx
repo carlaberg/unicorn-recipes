@@ -20,10 +20,9 @@ import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 import {
-  DAY_NAMES,
   formatDateParam,
   formatWeekRange,
-  getWeekStart,
+  getDayNamesFromStartDate,
   isSameDay,
 } from "@/lib/date-utils";
 
@@ -54,9 +53,29 @@ type WeeklyMenu = {
   isTemplate?: boolean;
   tags?: string[];
   startDate: string | null;
+  rotationId?: number | null;
+  rotationWeekIndex?: number | null;
   createdAt?: string;
   updatedAt?: string;
   menuEntries: MenuEntry[];
+};
+
+type RotationTemplateRef = {
+  id: number;
+  templateMenuId: number;
+  orderIndex: number;
+  templateMenu: {
+    id: number;
+    name: string | null;
+  };
+};
+
+type ActiveRotation = {
+  id: number;
+  name: string | null;
+  startDate: string;
+  isActive: boolean;
+  templates: RotationTemplateRef[];
 };
 
 // ─── Slot component ───────────────────────────────────────────────────────────
@@ -205,6 +224,15 @@ export default function MenuScreen() {
   const [editedMenuName, setEditedMenuName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [isDeletingMenu, setIsDeletingMenu] = useState(false);
+  const [activeRotation, setActiveRotation] = useState<ActiveRotation | null>(
+    null,
+  );
+  const [latestRotation, setLatestRotation] = useState<ActiveRotation | null>(
+    null,
+  );
+  const [isLoadingRotation, setIsLoadingRotation] = useState(false);
+  const [hasLoadedRotationContext, setHasLoadedRotationContext] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -239,28 +267,39 @@ export default function MenuScreen() {
     });
   }
 
-  function isDateWithinWeek(date: Date, referenceDate: Date) {
-    const weekStart = getWeekStart(referenceDate);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
+  function isDateWithinMenuPeriod(menuStartDate: Date, referenceDate: Date) {
+    const periodStart = new Date(menuStartDate);
+    periodStart.setHours(0, 0, 0, 0);
 
-    const normalized = new Date(date);
-    normalized.setHours(0, 0, 0, 0);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setDate(periodStart.getDate() + 6);
+
+    const normalizedReference = new Date(referenceDate);
+    normalizedReference.setHours(0, 0, 0, 0);
 
     return (
-      normalized.getTime() >= weekStart.getTime() &&
-      normalized.getTime() <= weekEnd.getTime()
+      normalizedReference.getTime() >= periodStart.getTime() &&
+      normalizedReference.getTime() <= periodEnd.getTime()
     );
   }
 
   const fetchMenus = useCallback(
-    async (weekStartToPrioritize: Date, keepMenuId?: number) => {
+    async (weekStartToPrioritize: Date) => {
       if (!isLoaded || !isSignedIn) return;
 
       setIsLoading(true);
       setError(null);
 
       try {
+        // Lazy materialization: ensure a menu exists for this week if an active rotation covers it.
+        await authorizedFetch("/me/menus/resolve-week", getTokenRef.current, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startDate: formatDateParam(weekStartToPrioritize),
+          }),
+        });
+
         const res = await authorizedFetch(
           "/me/menus/planned",
           getTokenRef.current,
@@ -278,24 +317,15 @@ export default function MenuScreen() {
           return;
         }
 
-        if (keepMenuId !== undefined) {
-          const keepIndex = sortedMenus.findIndex(
-            (menu) => menu.id === keepMenuId,
-          );
-          if (keepIndex >= 0) {
-            setActiveMenuIndex(keepIndex);
-            return;
-          }
-        }
-
         const currentWeekIndex = sortedMenus.findIndex((m) => {
           if (!m.startDate) return false;
-          return isDateWithinWeek(new Date(m.startDate), weekStartToPrioritize);
+          return isDateWithinMenuPeriod(
+            new Date(m.startDate),
+            weekStartToPrioritize,
+          );
         });
 
-        setActiveMenuIndex(
-          currentWeekIndex >= 0 ? currentWeekIndex : sortedMenus.length - 1,
-        );
+        setActiveMenuIndex(currentWeekIndex >= 0 ? currentWeekIndex : -1);
       } catch (e) {
         setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
       } finally {
@@ -305,35 +335,71 @@ export default function MenuScreen() {
     [isLoaded, isSignedIn],
   );
 
+  const fetchRotationContext = useCallback(async () => {
+    if (!isLoaded || !isSignedIn) return;
+
+    setHasLoadedRotationContext(false);
+    setIsLoadingRotation(true);
+    setActiveRotation(null);
+    setLatestRotation(null);
+    try {
+      const [activeRes, rotationsRes] = await Promise.all([
+        authorizedFetch("/me/menus/rotations/active", getTokenRef.current),
+        authorizedFetch("/me/menus/rotations", getTokenRef.current),
+      ]);
+
+      if (!activeRes.ok) {
+        throw new Error(
+          `${STRINGS.menuRotation.loadFailed} (${activeRes.status})`,
+        );
+      }
+
+      if (!rotationsRes.ok) {
+        throw new Error(
+          `${STRINGS.menuRotation.loadFailed} (${rotationsRes.status})`,
+        );
+      }
+
+      const active = (await activeRes.json()) as ActiveRotation | null;
+      const rotations = (await rotationsRes.json()) as ActiveRotation[];
+      setActiveRotation(active);
+      setLatestRotation(rotations[0] ?? null);
+    } catch {
+      setActiveRotation(null);
+      setLatestRotation(null);
+    } finally {
+      setIsLoadingRotation(false);
+      setHasLoadedRotationContext(true);
+    }
+  }, [isLoaded, isSignedIn]);
+
   useFocusEffect(
     useCallback(() => {
-      fetchMenus(preferredWeekStart, activeMenu?.id);
-    }, [fetchMenus, preferredWeekStart, activeMenu?.id]),
+      fetchMenus(preferredWeekStart);
+      fetchRotationContext();
+    }, [fetchMenus, preferredWeekStart, fetchRotationContext]),
   );
 
   useEffect(() => {
     if (!refreshToken || Array.isArray(refreshToken)) return;
-    fetchMenus(preferredWeekStart, activeMenu?.id);
-  }, [refreshToken, preferredWeekStart, fetchMenus, activeMenu?.id]);
+    fetchMenus(preferredWeekStart);
+    fetchRotationContext();
+  }, [refreshToken, preferredWeekStart, fetchMenus, fetchRotationContext]);
 
   useEffect(() => {
     setEditedMenuName(activeMenu?.name?.trim() ?? "");
     setIsEditingName(false);
   }, [activeMenu?.id, activeMenu?.name]);
 
-  function navigateMenu(delta: number) {
-    setActiveMenuIndex((prev) => {
-      if (menusInDateOrder.length === 0) return -1;
-      const current = prev < 0 ? 0 : prev;
-      const next = current + delta;
-      if (next < 0 || next >= menusInDateOrder.length) return current;
-      return next;
-    });
-  }
-
   function openShoppingList() {
     if (!activeMenu) return;
     router.push(`/menu/shopping?menuId=${activeMenu.id}` as any);
+  }
+
+  function openCalendarView() {
+    router.push(
+      `/menu/calendar?weekStart=${formatDateParam(currentDisplayWeekStart)}` as any,
+    );
   }
 
   function openPlanFlow() {
@@ -343,6 +409,17 @@ export default function MenuScreen() {
     router.push(
       `/menu/plan?weekStart=${formatDateParam(weekStartForPlan)}` as any,
     );
+  }
+
+  function openRotationPlanner() {
+    if (isLoadingRotation || !hasLoadedRotationContext) return;
+
+    const rotationId = activeRotation?.id ?? latestRotation?.id;
+    if (rotationId) {
+      router.push(`/menu/rotation?rotationId=${rotationId}` as any);
+      return;
+    }
+    router.push("/menu/rotation" as any);
   }
 
   async function removeEntry(entry: MenuEntry) {
@@ -367,7 +444,7 @@ export default function MenuScreen() {
       );
     } catch {
       // silent — re-fetch will reconcile
-      await fetchMenus(preferredWeekStart, activeMenu?.id);
+      await fetchMenus(preferredWeekStart);
     }
   }
 
@@ -475,6 +552,25 @@ export default function MenuScreen() {
   const currentDisplayWeekStart = activeMenu?.startDate
     ? new Date(activeMenu.startDate)
     : preferredWeekStart;
+  const currentDayLabels = getDayNamesFromStartDate(currentDisplayWeekStart);
+  const isDisplayedPeriodOnOrAfterActiveRotationStart = (() => {
+    if (!activeRotation) return false;
+
+    const displayedStart = new Date(currentDisplayWeekStart);
+    displayedStart.setHours(0, 0, 0, 0);
+
+    const rotationStart = new Date(activeRotation.startDate);
+    rotationStart.setHours(0, 0, 0, 0);
+
+    return displayedStart.getTime() >= rotationStart.getTime();
+  })();
+
+  const isCurrentWeekInActiveRotation =
+    !!activeRotation &&
+    ((!!activeMenu &&
+      activeMenu.rotationId != null &&
+      activeMenu.rotationId === activeRotation.id) ||
+      isDisplayedPeriodOnOrAfterActiveRotationStart);
 
   function handleOpenRecipe(entry: MenuEntry) {
     if (!entry.recipe) return;
@@ -494,17 +590,7 @@ export default function MenuScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable
-            onPress={() => navigateMenu(-1)}
-            hitSlop={12}
-            style={[
-              styles.navArrow,
-              activeMenuIndex <= 0 && styles.navArrowDisabled,
-            ]}
-            disabled={activeMenuIndex <= 0}
-          >
-            <ThemedText style={styles.arrowText}>‹</ThemedText>
-          </Pressable>
+          <View style={styles.headerSide} />
           <View style={styles.weekLabelWrap}>
             <ThemedText type="subtitle" style={styles.weekLabel}>
               {formatWeekRange(currentDisplayWeekStart)}
@@ -562,25 +648,121 @@ export default function MenuScreen() {
                 </View>
               ))}
           </View>
-          <Pressable
-            onPress={() => navigateMenu(1)}
-            hitSlop={12}
-            style={[
-              styles.navArrow,
-              (activeMenuIndex < 0 ||
-                activeMenuIndex >= menusInDateOrder.length - 1) &&
-                styles.navArrowDisabled,
-            ]}
-            disabled={
-              activeMenuIndex < 0 ||
-              activeMenuIndex >= menusInDateOrder.length - 1
-            }
-          >
-            <ThemedText style={styles.arrowText}>›</ThemedText>
-          </Pressable>
+          <View style={styles.headerSide}>
+            <Pressable
+              onPress={openCalendarView}
+              style={[
+                styles.calendarButton,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+            >
+              <ThemedText type="small">{STRINGS.menu.openCalendar}</ThemedText>
+            </Pressable>
+          </View>
         </View>
 
         {/* Body */}
+
+        <View
+          style={[
+            styles.rotationCard,
+            {
+              borderColor: isCurrentWeekInActiveRotation
+                ? theme.accent
+                : theme.backgroundElement,
+              backgroundColor: theme.background,
+            },
+          ]}
+        >
+          <View style={styles.rotationHeader}>
+            <ThemedText
+              type="smallBold"
+              themeColor={
+                isCurrentWeekInActiveRotation ? "text" : "textSecondary"
+              }
+            >
+              {STRINGS.menuRotation.currentWeekStatusTitle}
+            </ThemedText>
+            <Pressable
+              onPress={openRotationPlanner}
+              disabled={isLoadingRotation || !hasLoadedRotationContext}
+              style={[
+                styles.rotationActionButton,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+            >
+              <ThemedText type="small">
+                {hasLoadedRotationContext &&
+                !isLoadingRotation &&
+                (activeRotation || latestRotation)
+                  ? STRINGS.menuRotation.manage
+                  : STRINGS.menuRotation.create}
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {isLoadingRotation ? (
+            <ActivityIndicator
+              color={theme.text}
+              style={styles.rotationLoader}
+            />
+          ) : activeRotation ? (
+            <View style={styles.rotationStatusContent}>
+              <View
+                style={[
+                  styles.rotationStatusBadge,
+                  {
+                    backgroundColor: isCurrentWeekInActiveRotation
+                      ? theme.accent
+                      : theme.backgroundElement,
+                  },
+                ]}
+              >
+                <ThemedText
+                  type="smallBold"
+                  style={{
+                    color: isCurrentWeekInActiveRotation
+                      ? theme.accentText
+                      : theme.textSecondary,
+                  }}
+                >
+                  {isCurrentWeekInActiveRotation
+                    ? STRINGS.menuRotation.inRotationThisWeek
+                    : STRINGS.menuRotation.notInRotationThisWeek}
+                </ThemedText>
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                {STRINGS.menuRotation.activeRotationLabel}
+              </ThemedText>
+              <ThemedText type="default" style={styles.rotationName}>
+                {activeRotation.name?.trim() || STRINGS.menu.unnamedMenu}
+              </ThemedText>
+            </View>
+          ) : latestRotation ? (
+            <View style={styles.rotationStatusContent}>
+              <View
+                style={[
+                  styles.rotationStatusBadge,
+                  { backgroundColor: theme.backgroundElement },
+                ]}
+              >
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {STRINGS.menuRotation.inactiveRotationStatus}
+                </ThemedText>
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                {STRINGS.menuRotation.lastRotationLabel}
+              </ThemedText>
+              <ThemedText type="default" style={styles.rotationName}>
+                {latestRotation.name?.trim() || STRINGS.menu.unnamedMenu}
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText themeColor="textSecondary">
+              {STRINGS.menuRotation.noActive}
+            </ThemedText>
+          )}
+        </View>
 
         {!!activeMenu && (
           <Pressable
@@ -634,18 +816,9 @@ export default function MenuScreen() {
             >
               <ThemedText>{STRINGS.menu.planWeek}</ThemedText>
             </Pressable>
-            <Pressable
-              style={[
-                styles.createButton,
-                { backgroundColor: theme.backgroundElement },
-              ]}
-              onPress={openPlanFlow}
-            >
-              <ThemedText>{STRINGS.menu.planWeek}</ThemedText>
-            </Pressable>
           </View>
         ) : (
-          DAY_NAMES.map((name, index) => (
+          currentDayLabels.map((name, index) => (
             <DayRow
               key={index}
               dayOffset={index}
@@ -695,6 +868,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: Spacing.three,
+  },
+  headerSide: {
+    width: 96,
+  },
+  rotationCard: {
+    borderWidth: 1,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+    marginBottom: Spacing.three,
+  },
+  rotationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.two,
+  },
+  rotationActionButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: 8,
+  },
+  rotationLoader: {
+    marginVertical: Spacing.one,
+  },
+  rotationStatusContent: {
+    gap: Spacing.one,
+  },
+  rotationStatusBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: 999,
+  },
+  rotationName: {
+    fontWeight: "600",
   },
   fab: {
     position: "absolute",
@@ -747,16 +957,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.three,
   },
-  navArrow: {
-    width: 36,
+  calendarButton: {
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
     alignItems: "center",
-  },
-  navArrowDisabled: {
-    opacity: 0.35,
-  },
-  arrowText: {
-    fontSize: 28,
-    lineHeight: 32,
   },
   loader: {
     marginTop: Spacing.five,

@@ -2,6 +2,14 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import db from "../db";
 import { getUserIdFromRequest } from "../utils/auth";
+import {
+    addDaysUtc,
+    formatDateOnlyUtc,
+    getActiveRotationForProjection,
+    getPeriodStartUtc,
+    projectRotationWeek,
+    resolveWeekMenu,
+} from "../utils/rotation";
 
 const createMenuBodySchema = z
   .object({
@@ -66,6 +74,15 @@ const planMenuBodySchema = z.object({
   name: z.string().trim().min(1).optional(),
 });
 
+const calendarQuerySchema = z.object({
+  startDate: z.string().date().optional(),
+  weeks: z.coerce.number().int().min(1).max(52).optional().default(26),
+});
+
+const resolveWeekBodySchema = z.object({
+  startDate: z.string().date(),
+});
+
 const validMealTypes = ["LUNCH", "DINNER"] as const;
 type MealTypeParam = (typeof validMealTypes)[number];
 
@@ -83,6 +100,12 @@ function parseMealType(raw: string): MealTypeParam {
     throw new Error("mealType must be LUNCH or DINNER");
   }
   return upper;
+}
+
+function normalizeDateUtc(date: Date) {
+  const normalized = new Date(date);
+  normalized.setUTCHours(0, 0, 0, 0);
+  return normalized;
 }
 
 export async function menuRoutes(app: FastifyInstance) {
@@ -119,7 +142,7 @@ export async function menuRoutes(app: FastifyInstance) {
     if (!userId) return;
 
     const menus = await db.weeklyMenu.findMany({
-      where: { userId, isTemplate: false },
+      where: { userId, isTemplate: false, hiddenFromCalendar: false },
       orderBy: [{ startDate: "asc" }, { createdAt: "desc" }],
       include: {
         menuEntries: {
@@ -133,6 +156,150 @@ export async function menuRoutes(app: FastifyInstance) {
 
     return reply.send(menus);
   });
+
+  // GET /me/menus/calendar — list week-level calendar projection
+  app.get(
+    "/calendar",
+    async (
+      req: FastifyRequest<{
+        Querystring: { startDate?: string; weeks?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const userId = await getUserIdFromRequest(
+        req.headers as Record<string, string | string[] | undefined>,
+      );
+      if (!userId) return;
+
+      const parsed = calendarQuerySchema.safeParse(req.query ?? {});
+      if (!parsed.success) {
+        return reply.badRequest(
+          parsed.error.issues[0]?.message ?? "Invalid query",
+        );
+      }
+
+      const rangeStart = normalizeDateUtc(
+        parsed.data.startDate ? new Date(parsed.data.startDate) : new Date(),
+      );
+      const rangeEnd = addDaysUtc(rangeStart, (parsed.data.weeks - 1) * 7);
+
+      const [menus, activeRotation] = await Promise.all([
+        db.weeklyMenu.findMany({
+          where: {
+            userId,
+            isTemplate: false,
+            hiddenFromCalendar: false,
+            startDate: {
+              gte: rangeStart,
+              lte: rangeEnd,
+            },
+          },
+          orderBy: [{ startDate: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            rotationId: true,
+          },
+        }),
+        getActiveRotationForProjection(userId),
+      ]);
+
+      const byWeek = new Map<string, (typeof menus)[number]>();
+      menus.forEach((menu) => {
+        if (!menu.startDate) return;
+        byWeek.set(formatDateOnlyUtc(menu.startDate), menu);
+      });
+
+      const weeks = Array.from({ length: parsed.data.weeks }, (_, index) => {
+        const rawStartDate = addDaysUtc(rangeStart, index * 7);
+        const bucketStartDate = activeRotation
+          ? getPeriodStartUtc(
+              rawStartDate,
+              activeRotation.startDate.getUTCDay(),
+            )
+          : rawStartDate;
+        const startDateStr = formatDateOnlyUtc(bucketStartDate);
+        const materialized = byWeek.get(startDateStr);
+
+        if (materialized) {
+          return {
+            startDate: startDateStr,
+            status: "materialized" as const,
+            menuId: materialized.id,
+            menuName: materialized.name,
+            isRotation: materialized.rotationId !== null,
+            rotationId: materialized.rotationId,
+            templateMenuId: null,
+            templateName: null,
+          };
+        }
+
+        if (activeRotation) {
+          const projection = projectRotationWeek(activeRotation, rawStartDate);
+          if (projection) {
+            return {
+              startDate: formatDateOnlyUtc(projection.periodStartDate),
+              status: "rotation-virtual" as const,
+              menuId: null,
+              menuName: null,
+              isRotation: true,
+              rotationId: projection.rotationId,
+              templateMenuId: projection.templateMenuId,
+              templateName: projection.templateName,
+            };
+          }
+        }
+
+        return {
+          startDate: startDateStr,
+          status: "empty" as const,
+          menuId: null,
+          menuName: null,
+          isRotation: false,
+          rotationId: null,
+          templateMenuId: null,
+          templateName: null,
+        };
+      });
+
+      return reply.send({
+        rangeStart: formatDateOnlyUtc(rangeStart),
+        weeks,
+      });
+    },
+  );
+
+  // POST /me/menus/resolve-week — get or materialize menu for a specific week
+  app.post(
+    "/resolve-week",
+    async (
+      req: FastifyRequest<{ Body: { startDate: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const userId = await getUserIdFromRequest(
+        req.headers as Record<string, string | string[] | undefined>,
+      );
+      if (!userId) return;
+
+      const parsed = resolveWeekBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.badRequest(
+          parsed.error.issues[0]?.message ?? "Invalid body",
+        );
+      }
+
+      const resolved = await resolveWeekMenu(
+        userId,
+        new Date(parsed.data.startDate),
+      );
+      if (!resolved) {
+        return reply.notFound("No menu for this week");
+      }
+
+      return reply.send(resolved);
+    },
+  );
 
   // GET /me/menus/templates — list template menus with optional search/tag filter
   app.get(

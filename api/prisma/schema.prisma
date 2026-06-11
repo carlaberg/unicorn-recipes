@@ -27,6 +27,7 @@ model User {
   recipes      Recipe[]
   weeklyMenus  WeeklyMenu[]
   shoppingChecks ShoppingCheck[]
+  menuRotations MenuRotation[]
 }
 
 model Recipe {
@@ -48,13 +49,52 @@ model WeeklyMenu {
   userId      Int
   name        String?
   isTemplate  Boolean     @default(false)
+  hiddenFromCalendar Boolean @default(false)
   tags        String[]    @default([])
+  rotationId  Int?
+  rotationWeekIndex Int?
   startDate   DateTime?   @db.Date
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   user        User        @relation(fields: [userId], references: [id])
+  rotation    MenuRotation? @relation(fields: [rotationId], references: [id], onDelete: SetNull)
   menuEntries MenuEntry[]
   checks      ShoppingCheck[]
+  rotationTemplateRefs MenuRotationTemplate[]
+}
+
+model MenuRotation {
+  id            Int                    @id @default(autoincrement())
+  userId        Int
+  name          String?
+  description   String?
+  startDate     DateTime               @db.Date
+  isActive      Boolean                @default(false)
+  maxCycles     Int?
+  nextWeekIndex Int                    @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  user          User                   @relation(fields: [userId], references: [id])
+  templates     MenuRotationTemplate[]
+  generatedMenus WeeklyMenu[]
+
+  @@index([userId])
+  @@index([userId, isActive])
+}
+
+model MenuRotationTemplate {
+  id             Int          @id @default(autoincrement())
+  rotationId     Int
+  templateMenuId Int
+  orderIndex     Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  rotation       MenuRotation @relation(fields: [rotationId], references: [id], onDelete: Cascade)
+  templateMenu   WeeklyMenu   @relation(fields: [templateMenuId], references: [id])
+
+  @@unique([rotationId, orderIndex])
+  @@index([rotationId])
+  @@index([templateMenuId])
 }
 
 model MenuEntry {
