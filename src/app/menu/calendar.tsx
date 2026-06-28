@@ -214,6 +214,11 @@ export default function MenuCalendarScreen() {
     }
   }
 
+  function openCurrentMenuView() {
+    router.replace(
+      `/menu?weekStart=${selectedWeekStart}&refreshToken=${Date.now()}` as any,
+    );
+  }
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -225,17 +230,22 @@ export default function MenuCalendarScreen() {
           },
         ]}
       >
-        <Pressable
-          onPress={() => router.back()}
+        <ThemedText type="subtitle">{STRINGS.menu.calendarTitle}</ThemedText>
+        <View
           style={[
-            styles.backButton,
+            styles.segmentedControl,
             { backgroundColor: theme.backgroundElement },
           ]}
         >
-          <ThemedText type="small">{STRINGS.shopping.back}</ThemedText>
-        </Pressable>
-
-        <ThemedText type="subtitle">{STRINGS.menu.calendarTitle}</ThemedText>
+          <Pressable onPress={openCurrentMenuView} style={styles.segmentButton}>
+            <ThemedText type="small">{STRINGS.menu.segmentCurrent}</ThemedText>
+          </Pressable>
+          <View
+            style={[styles.segmentButton, { backgroundColor: theme.background }]}
+          >
+            <ThemedText type="small">{STRINGS.menu.segmentCalendar}</ThemedText>
+          </View>
+        </View>
         <ThemedText themeColor="textSecondary" style={styles.hintText}>
           {STRINGS.menu.calendarHint}
         </ThemedText>
@@ -358,11 +368,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     gap: Spacing.two,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    borderRadius: 8,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+  segmentedControl: {
+    flexDirection: "row",
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+  },
+  segmentButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: Spacing.one,
+    alignItems: "center",
+    justifyContent: "center",
   },
   hintText: {
     marginBottom: Spacing.one,

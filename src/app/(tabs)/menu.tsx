@@ -224,6 +224,9 @@ export default function MenuScreen() {
   const [editedMenuName, setEditedMenuName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [isDeletingMenu, setIsDeletingMenu] = useState(false);
+  const [activeSegment, setActiveSegment] = useState<"current" | "calendar">(
+    "current",
+  );
   const [activeRotation, setActiveRotation] = useState<ActiveRotation | null>(
     null,
   );
@@ -397,7 +400,8 @@ export default function MenuScreen() {
   }
 
   function openCalendarView() {
-    router.push(
+    setActiveSegment("calendar");
+    router.replace(
       `/menu/calendar?weekStart=${formatDateParam(currentDisplayWeekStart)}` as any,
     );
   }
@@ -411,6 +415,10 @@ export default function MenuScreen() {
     );
   }
 
+  function openNewRotation() {
+    router.push("/menu/rotation" as any);
+  }
+
   function openRotationPlanner() {
     if (isLoadingRotation || !hasLoadedRotationContext) return;
 
@@ -420,6 +428,37 @@ export default function MenuScreen() {
       return;
     }
     router.push("/menu/rotation" as any);
+  }
+
+  function openActionsMenu() {
+    const actions: Array<{ text: string; style?: "cancel" | "destructive"; onPress?: () => void }> = [];
+
+    if (activeMenu) {
+      actions.push({ text: STRINGS.menu.shoppingList, onPress: openShoppingList });
+    }
+
+    if (activeRotation || latestRotation) {
+      actions.push({
+        text: activeRotation
+          ? STRINGS.menu.manageRotation
+          : STRINGS.menu.reactivateRotation,
+        onPress: openRotationPlanner,
+      });
+    }
+
+    actions.push({ text: STRINGS.menu.newRotation, onPress: openNewRotation });
+
+    if (activeMenu) {
+      actions.push({
+        text: STRINGS.menu.delete,
+        style: "destructive",
+        onPress: confirmDeleteMenu,
+      });
+    }
+
+    actions.push({ text: STRINGS.menu.cancel, style: "cancel" });
+
+    Alert.alert(STRINGS.menu.moreActions, undefined, actions);
   }
 
   async function removeEntry(entry: MenuEntry) {
@@ -650,36 +689,65 @@ export default function MenuScreen() {
           </View>
           <View style={styles.headerSide}>
             <Pressable
-              onPress={openCalendarView}
+              onPress={openActionsMenu}
               style={[
-                styles.calendarButton,
+                styles.actionMenuButton,
                 { backgroundColor: theme.backgroundElement },
               ]}
             >
-              <ThemedText type="small">{STRINGS.menu.openCalendar}</ThemedText>
+              <ThemedText type="small">⋯</ThemedText>
             </Pressable>
           </View>
         </View>
 
-        {/* Body */}
-
         <View
           style={[
-            styles.rotationCard,
-            {
-              borderColor: isCurrentWeekInActiveRotation
-                ? theme.accent
-                : theme.backgroundElement,
-              backgroundColor: theme.background,
-            },
+            styles.segmentedControl,
+            { backgroundColor: theme.backgroundElement },
           ]}
         >
+          <Pressable
+            onPress={() => setActiveSegment("current")}
+            style={[
+              styles.segmentButton,
+              {
+                backgroundColor:
+                  activeSegment === "current" ? theme.background : "transparent",
+              },
+            ]}
+          >
+            <ThemedText type="small">{STRINGS.menu.segmentCurrent}</ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={openCalendarView}
+            style={[
+              styles.segmentButton,
+              {
+                backgroundColor:
+                  activeSegment === "calendar" ? theme.background : "transparent",
+              },
+            ]}
+          >
+            <ThemedText type="small">{STRINGS.menu.segmentCalendar}</ThemedText>
+          </Pressable>
+        </View>
+
+        {/* Body */}
+
+        {isCurrentWeekInActiveRotation && activeRotation ? (
+          <View
+            style={[
+              styles.rotationCard,
+              {
+                borderColor: theme.accent,
+                backgroundColor: theme.background,
+              },
+            ]}
+          >
           <View style={styles.rotationHeader}>
             <ThemedText
               type="smallBold"
-              themeColor={
-                isCurrentWeekInActiveRotation ? "text" : "textSecondary"
-              }
+              themeColor="text"
             >
               {STRINGS.menuRotation.currentWeekStatusTitle}
             </ThemedText>
@@ -702,96 +770,32 @@ export default function MenuScreen() {
           </View>
 
           {isLoadingRotation ? (
-            <ActivityIndicator
-              color={theme.text}
-              style={styles.rotationLoader}
-            />
-          ) : activeRotation ? (
+            <ActivityIndicator color={theme.text} style={styles.rotationLoader} />
+          ) : (
             <View style={styles.rotationStatusContent}>
               <View
                 style={[
                   styles.rotationStatusBadge,
-                  {
-                    backgroundColor: isCurrentWeekInActiveRotation
-                      ? theme.accent
-                      : theme.backgroundElement,
-                  },
+                  { backgroundColor: theme.accent },
                 ]}
               >
                 <ThemedText
                   type="smallBold"
-                  style={{
-                    color: isCurrentWeekInActiveRotation
-                      ? theme.accentText
-                      : theme.textSecondary,
-                  }}
+                  style={{ color: theme.accentText }}
                 >
-                  {isCurrentWeekInActiveRotation
-                    ? STRINGS.menuRotation.inRotationThisWeek
-                    : STRINGS.menuRotation.notInRotationThisWeek}
+                  {STRINGS.menuRotation.inRotationThisWeek}
                 </ThemedText>
               </View>
               <ThemedText type="small" themeColor="textSecondary">
                 {STRINGS.menuRotation.activeRotationLabel}
               </ThemedText>
               <ThemedText type="default" style={styles.rotationName}>
-                {activeRotation.name?.trim() || STRINGS.menu.unnamedMenu}
+                {activeRotation?.name?.trim() || STRINGS.menu.unnamedMenu}
               </ThemedText>
             </View>
-          ) : latestRotation ? (
-            <View style={styles.rotationStatusContent}>
-              <View
-                style={[
-                  styles.rotationStatusBadge,
-                  { backgroundColor: theme.backgroundElement },
-                ]}
-              >
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  {STRINGS.menuRotation.inactiveRotationStatus}
-                </ThemedText>
-              </View>
-              <ThemedText type="small" themeColor="textSecondary">
-                {STRINGS.menuRotation.lastRotationLabel}
-              </ThemedText>
-              <ThemedText type="default" style={styles.rotationName}>
-                {latestRotation.name?.trim() || STRINGS.menu.unnamedMenu}
-              </ThemedText>
-            </View>
-          ) : (
-            <ThemedText themeColor="textSecondary">
-              {STRINGS.menuRotation.noActive}
-            </ThemedText>
           )}
-        </View>
-
-        {!!activeMenu && (
-          <Pressable
-            style={[
-              styles.shoppingButton,
-              { backgroundColor: theme.backgroundElement },
-            ]}
-            onPress={openShoppingList}
-          >
-            <ThemedText>{STRINGS.menu.shoppingList}</ThemedText>
-          </Pressable>
-        )}
-        {!!activeMenu && (
-          <Pressable
-            style={[
-              styles.deleteMenuButton,
-              {
-                backgroundColor: theme.backgroundElement,
-                opacity: isDeletingMenu ? 0.7 : 1,
-              },
-            ]}
-            onPress={confirmDeleteMenu}
-            disabled={isDeletingMenu}
-          >
-            <ThemedText>
-              {isDeletingMenu ? STRINGS.menu.deleting : STRINGS.menu.delete}
-            </ThemedText>
-          </Pressable>
-        )}
+          </View>
+        ) : null}
 
         {isLoading ? (
           <ActivityIndicator color={theme.text} style={styles.loader} />
@@ -870,7 +874,29 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.three,
   },
   headerSide: {
-    width: 96,
+    width: 52,
+    alignItems: "flex-end",
+  },
+  actionMenuButton: {
+    borderRadius: 8,
+    width: 36,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentedControl: {
+    flexDirection: "row",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: Spacing.three,
+    gap: 4,
+  },
+  segmentButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: Spacing.one,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rotationCard: {
     borderWidth: 1,
@@ -957,28 +983,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.three,
   },
-  calendarButton: {
-    borderRadius: 8,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
-    alignItems: "center",
-  },
   loader: {
     marginTop: Spacing.five,
-  },
-  shoppingButton: {
-    alignSelf: "center",
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 8,
-    marginBottom: Spacing.two,
-  },
-  deleteMenuButton: {
-    alignSelf: "center",
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 8,
-    marginBottom: Spacing.three,
   },
   emptyState: {
     alignItems: "center",
