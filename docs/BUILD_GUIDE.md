@@ -5,9 +5,10 @@ This guide explains how to register test devices and create standalone builds fo
 ## Table of Contents
 
 1. [Registering Test Devices](#registering-test-devices)
-2. [Creating an EAS Build](#creating-an-eas-build)
-3. [Installing on Your Device](#installing-on-your-device)
-4. [Troubleshooting](#troubleshooting)
+2. [Expo Development Builds](#expo-development-builds)
+3. [Creating an EAS Build](#creating-an-eas-build)
+4. [Installing on Your Device](#installing-on-your-device)
+5. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -66,6 +67,46 @@ After registering a new device, you need to regenerate provisioning profiles:
 3. Click **Edit** and make sure your new device is included
 4. Click **Save** and download the updated profile
 5. Or let EAS handle this automatically (see next section)
+
+---
+
+## Expo Development Builds
+
+Expo development builds are installable app binaries that include your native code and the Expo Dev Client. They are different from Expo Go because they can run native modules and app config that are specific to this project.
+
+### What They Are Good For
+
+- Testing real app behavior with project-specific native dependencies
+- Sharing internal test builds with teammates
+- Debugging features that do not work in Expo Go
+
+### How to Create a Development Build
+
+This project already has a `development` profile in `eas.json`.
+
+1. Make sure you're logged in:
+
+```bash
+eas login
+```
+
+2. Create the iOS development build:
+
+```bash
+eas build --platform ios --profile development
+```
+
+3. Install the resulting build on your device from the EAS link.
+
+4. Start Metro in dev-client mode:
+
+```bash
+npx expo start --dev-client
+```
+
+5. Open the installed app and connect to the Metro server (QR code or direct connection).
+
+Tip: Use development builds during feature work, then use `preview` or `production` profiles for broader testing and release builds.
 
 ---
 
@@ -184,6 +225,18 @@ xcrun simctl install booted path/to/app.ipa
 ---
 
 ## Quick Reference
+
+### Create a Development Build
+
+```bash
+eas build --platform ios --profile development
+```
+
+### Start Metro for Development Build
+
+```bash
+npx expo start --dev-client
+```
 
 ### Build a Preview (Device Testing)
 
