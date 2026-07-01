@@ -229,6 +229,9 @@ export async function menuRoutes(app: FastifyInstance) {
             menuId: materialized.id,
             menuName: materialized.name,
             isRotation: materialized.rotationId !== null,
+            isActiveRotation:
+              activeRotation !== null &&
+              materialized.rotationId === activeRotation.id,
             rotationId: materialized.rotationId,
             templateMenuId: null,
             templateName: null,
@@ -244,6 +247,7 @@ export async function menuRoutes(app: FastifyInstance) {
               menuId: null,
               menuName: null,
               isRotation: true,
+              isActiveRotation: true,
               rotationId: projection.rotationId,
               templateMenuId: projection.templateMenuId,
               templateName: projection.templateName,
@@ -257,6 +261,7 @@ export async function menuRoutes(app: FastifyInstance) {
           menuId: null,
           menuName: null,
           isRotation: false,
+          isActiveRotation: false,
           rotationId: null,
           templateMenuId: null,
           templateName: null,
@@ -265,6 +270,7 @@ export async function menuRoutes(app: FastifyInstance) {
 
       return reply.send({
         rangeStart: formatDateOnlyUtc(rangeStart),
+        activeRotationId: activeRotation?.id ?? null,
         weeks,
       });
     },

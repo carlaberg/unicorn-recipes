@@ -82,7 +82,11 @@ export const STRINGS = {
     planWeek: "Planera vecka",
     openCalendar: "Kalender",
     calendarTitle: "Kalenderöversikt",
-    calendarHint: "Tryck på en vecka för att öppna menyn.",
+    calendarHint:
+      "Kalendern visar planerade veckor. Använd knappen för att redigera vecka.",
+    calendarRotationWeek: "Rotationsvecka",
+    calendarManualWeek: "Manuell vecka",
+    editWeek: "Editera vecka",
     noMenuInWeek: "Ingen meny planerad för den här veckan",
     openLibrary: "Menybibliotek",
     noPlannedMenuForWeek: "Ingen planerad meny den här veckan",

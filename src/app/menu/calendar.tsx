@@ -31,6 +31,7 @@ type CalendarWeek = {
   menuId: number | null;
   menuName: string | null;
   isRotation: boolean;
+  isActiveRotation: boolean;
   rotationId: number | null;
   templateMenuId: number | null;
   templateName: string | null;
@@ -38,8 +39,13 @@ type CalendarWeek = {
 
 type CalendarResponse = {
   rangeStart: string;
+  activeRotationId: number | null;
   weeks: CalendarWeek[];
 };
+
+type ActiveRotationResponse = {
+  id: number;
+} | null;
 
 export default function MenuCalendarScreen() {
   const theme = useTheme();
@@ -47,15 +53,26 @@ export default function MenuCalendarScreen() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   const params = useLocalSearchParams<{ weekStart?: string }>();
+  const rotationWeekColor = "#2E9B4B";
+  const manualWeekColor = theme.accent;
 
-  const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
+  const [selectedWeekStart] = useState(() => {
     const parsed = new Date(String(params.weekStart ?? ""));
     if (!Number.isNaN(parsed.getTime())) {
       return formatDateParam(parsed);
     }
     return formatDateParam(new Date());
   });
+  const [visibleMonthKey, setVisibleMonthKey] = useState(() => {
+    const parsed = new Date(selectedWeekStart);
+    if (Number.isNaN(parsed.getTime())) {
+      const today = new Date();
+      return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    }
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [weeks, setWeeks] = useState<CalendarWeek[]>([]);
+  const [activeRotationId, setActiveRotationId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isOpening, setIsOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,21 +88,31 @@ export default function MenuCalendarScreen() {
     setError(null);
 
     try {
-      const response = await authorizedFetch(
-        `/me/menus/calendar?startDate=${selectedWeekStart}&weeks=26`,
-        getTokenRef.current,
-      );
+      const [calendarResponse, activeRotationResponse] = await Promise.all([
+        authorizedFetch(
+          `/me/menus/calendar?startDate=${selectedWeekStart}&weeks=26`,
+          getTokenRef.current,
+        ),
+        authorizedFetch("/me/menus/rotations/active", getTokenRef.current),
+      ]);
 
-      if (!response.ok) {
+      if (!calendarResponse.ok) {
         throw new Error(
-          `${STRINGS.menu.fetchMenusFailed} (${response.status})`,
+          `${STRINGS.menu.fetchMenusFailed} (${calendarResponse.status})`,
         );
       }
 
-      const payload = (await response.json()) as CalendarResponse;
+      const payload = (await calendarResponse.json()) as CalendarResponse;
+      const activeRotation = activeRotationResponse.ok
+        ? ((await activeRotationResponse.json()) as ActiveRotationResponse)
+        : null;
+      setActiveRotationId(
+        payload.activeRotationId ?? activeRotation?.id ?? null,
+      );
       setWeeks(payload.weeks ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
+      setActiveRotationId(null);
       setWeeks([]);
     } finally {
       setIsLoading(false);
@@ -99,28 +126,58 @@ export default function MenuCalendarScreen() {
   );
 
   const markedDates = useMemo(() => {
-    const marks: Record<string, any> = {
-      [selectedWeekStart]: {
-        selected: true,
-        selectedColor: theme.accent,
-      },
-    };
+    const marks: Record<string, any> = {};
 
     weeks.forEach((week) => {
       if (week.status === "empty") return;
 
-      marks[week.startDate] = {
-        ...(marks[week.startDate] ?? {}),
-        marked: true,
-        dotColor:
-          week.status === "materialized" ? theme.text : theme.textSecondary,
-        selected: week.startDate === selectedWeekStart,
-        selectedColor: theme.accent,
-      };
+      const isActiveRotationWeek =
+        week.isActiveRotation === true ||
+        (week.isRotation &&
+          activeRotationId !== null &&
+          week.rotationId === activeRotationId);
+      const dotColor = isActiveRotationWeek
+        ? rotationWeekColor
+        : manualWeekColor;
+      const weekStartDate = new Date(week.startDate);
+      if (Number.isNaN(weekStartDate.getTime())) return;
+
+      for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+        const day = new Date(weekStartDate);
+        day.setDate(weekStartDate.getDate() + dayOffset);
+        const dayKey = formatDateParam(day);
+
+        marks[dayKey] = {
+          ...(marks[dayKey] ?? {}),
+          marked: true,
+          dotColor,
+        };
+      }
     });
 
     return marks;
-  }, [weeks, selectedWeekStart, theme.accent, theme.text, theme.textSecondary]);
+  }, [activeRotationId, weeks, manualWeekColor]);
+
+  const weeksInVisibleMonth = useMemo(() => {
+    const monthStart = new Date(`${visibleMonthKey}-01T00:00:00`);
+    if (Number.isNaN(monthStart.getTime())) return [];
+
+    const monthEnd = new Date(monthStart);
+    monthEnd.setMonth(monthStart.getMonth() + 1, 0);
+    monthEnd.setHours(23, 59, 59, 999);
+
+    return weeks.filter((week) => {
+      const weekStart = new Date(week.startDate);
+      if (Number.isNaN(weekStart.getTime())) return false;
+
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      return weekStart <= monthEnd && weekEnd >= monthStart;
+    });
+  }, [visibleMonthKey, weeks]);
 
   async function openWeek(week: CalendarWeek) {
     if (isOpening || week.status === "empty") return;
@@ -129,20 +186,22 @@ export default function MenuCalendarScreen() {
     setError(null);
 
     try {
-      const response = await authorizedFetch(
-        "/me/menus/resolve-week",
-        getTokenRef.current,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ startDate: week.startDate }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `${STRINGS.menu.fetchMenusFailed} (${response.status})`,
+      if (week.status === "rotation-virtual") {
+        const response = await authorizedFetch(
+          "/me/menus/resolve-week",
+          getTokenRef.current,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ startDate: week.startDate }),
+          },
         );
+
+        if (!response.ok) {
+          throw new Error(
+            `${STRINGS.menu.fetchMenusFailed} (${response.status})`,
+          );
+        }
       }
 
       router.replace(
@@ -152,27 +211,6 @@ export default function MenuCalendarScreen() {
       setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
     } finally {
       setIsOpening(false);
-    }
-  }
-
-  function handleDayPress(dateString: string) {
-    const pressedDate = new Date(dateString);
-    pressedDate.setHours(0, 0, 0, 0);
-
-    const matchingWeek = weeks.find((item) => {
-      const start = new Date(item.startDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      return pressedDate >= start && pressedDate <= end;
-    });
-
-    const periodStart = matchingWeek?.startDate ?? formatDateParam(pressedDate);
-    setSelectedWeekStart(periodStart);
-
-    const week = weeks.find((item) => item.startDate === periodStart);
-    if (week && week.status !== "empty") {
-      void openWeek(week);
     }
   }
 
@@ -202,6 +240,25 @@ export default function MenuCalendarScreen() {
           {STRINGS.menu.calendarHint}
         </ThemedText>
 
+        <View style={styles.legendRow}>
+          <View style={styles.legendItem}>
+            <View
+              style={[styles.legendDot, { backgroundColor: rotationWeekColor }]}
+            />
+            <ThemedText type="small" themeColor="textSecondary">
+              {STRINGS.menu.calendarRotationWeek}
+            </ThemedText>
+          </View>
+          <View style={styles.legendItem}>
+            <View
+              style={[styles.legendDot, { backgroundColor: manualWeekColor }]}
+            />
+            <ThemedText type="small" themeColor="textSecondary">
+              {STRINGS.menu.calendarManualWeek}
+            </ThemedText>
+          </View>
+        </View>
+
         <View
           style={[
             styles.calendarWrap,
@@ -211,8 +268,11 @@ export default function MenuCalendarScreen() {
           <Calendar
             firstDay={1}
             markedDates={markedDates}
-            onDayPress={(day) => handleDayPress(day.dateString)}
             enableSwipeMonths
+            onMonthChange={(month) => {
+              const monthKey = `${month.year}-${String(month.month).padStart(2, "0")}`;
+              setVisibleMonthKey(monthKey);
+            }}
             theme={{
               backgroundColor: theme.background,
               calendarBackground: theme.background,
@@ -231,39 +291,48 @@ export default function MenuCalendarScreen() {
           <ActivityIndicator color={theme.text} style={styles.loader} />
         ) : (
           <View style={styles.weekList}>
-            {weeks
-              .filter((week) => week.status !== "empty")
-              .slice(0, 12)
-              .map((week) => (
+            {weeksInVisibleMonth.map((week) => (
+              <View
+                key={week.startDate}
+                style={[
+                  styles.weekRow,
+                  {
+                    borderColor: theme.backgroundElement,
+                    backgroundColor: theme.backgroundElement,
+                  },
+                ]}
+              >
+                <View style={styles.weekRowTextWrap}>
+                  <ThemedText type="smallBold">{week.startDate}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {week.status === "empty"
+                      ? STRINGS.menu.noMenuInWeek
+                      : week.status === "materialized"
+                        ? week.menuName || STRINGS.menu.unnamedMenu
+                        : `${STRINGS.menuRotation.templates}: ${week.templateName || STRINGS.menu.unnamedMenu}`}
+                  </ThemedText>
+                </View>
                 <Pressable
-                  key={week.startDate}
                   onPress={() => openWeek(week)}
-                  disabled={isOpening}
+                  disabled={isOpening || week.status === "empty"}
                   style={[
-                    styles.weekRow,
+                    styles.editWeekButton,
                     {
-                      borderColor: theme.backgroundElement,
-                      backgroundColor: theme.backgroundElement,
+                      backgroundColor:
+                        week.status === "empty"
+                          ? theme.backgroundSelected
+                          : theme.background,
+                      borderColor: theme.backgroundSelected,
+                      opacity: isOpening || week.status === "empty" ? 0.6 : 1,
                     },
                   ]}
                 >
-                  <View style={styles.weekRowTextWrap}>
-                    <ThemedText type="smallBold">{week.startDate}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {week.status === "materialized"
-                        ? week.menuName || STRINGS.menu.unnamedMenu
-                        : `${STRINGS.menuRotation.templates}: ${week.templateName || STRINGS.menu.unnamedMenu}`}
-                    </ThemedText>
-                  </View>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {week.status === "materialized"
-                      ? STRINGS.menuRotation.generated
-                      : STRINGS.menuRotation.available}
-                  </ThemedText>
+                  <ThemedText type="small">{STRINGS.menu.editWeek}</ThemedText>
                 </Pressable>
-              ))}
+              </View>
+            ))}
 
-            {weeks.every((week) => week.status === "empty") ? (
+            {weeksInVisibleMonth.length === 0 ? (
               <ThemedText themeColor="textSecondary" style={styles.emptyText}>
                 {STRINGS.menu.noMenuInWeek}
               </ThemedText>
@@ -298,6 +367,21 @@ const styles = StyleSheet.create({
   hintText: {
     marginBottom: Spacing.one,
   },
+  legendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.three,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.one,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
   calendarWrap: {
     borderWidth: 1,
     borderRadius: 12,
@@ -321,6 +405,12 @@ const styles = StyleSheet.create({
   weekRowTextWrap: {
     flex: 1,
     gap: 2,
+  },
+  editWeekButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
   },
   emptyText: {
     textAlign: "center",
