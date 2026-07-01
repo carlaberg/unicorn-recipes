@@ -7,7 +7,7 @@ export const STRINGS = {
   tabs: {
     home: "Hem",
     recipes: "Recept",
-    menu: "Nuvarande meny",
+    menu: "Veckoplanering",
     menuLibrary: "Menyer",
     account: "Konto",
     brand: "Unicorn Recipes",
@@ -79,8 +79,6 @@ export const STRINGS = {
     noMenuForWeek: "Ingen meny för den här veckan",
     createMenu: "Skapa meny",
     createMenuFromDate: "Ny meny från datum",
-    segmentCurrent: "Nuvarande meny",
-    segmentCalendar: "Kalender",
     planWeek: "Planera vecka",
     openCalendar: "Kalender",
     moreActions: "Åtgärder",

@@ -1,15 +1,16 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,10 +21,10 @@ import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 import {
-  formatDateParam,
-  formatWeekRange,
-  getDayNamesFromStartDate,
-  isSameDay,
+    formatDateParam,
+    formatWeekRange,
+    getDayNamesFromStartDate,
+    isSameDay,
 } from "@/lib/date-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -205,6 +206,7 @@ function DayRow({
 export default function MenuScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const isDarkTheme = theme.background === "#000000";
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   const { refreshToken, weekStart } = useLocalSearchParams<{
@@ -224,9 +226,6 @@ export default function MenuScreen() {
   const [editedMenuName, setEditedMenuName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [isDeletingMenu, setIsDeletingMenu] = useState(false);
-  const [activeSegment, setActiveSegment] = useState<"current" | "calendar">(
-    "current",
-  );
   const [activeRotation, setActiveRotation] = useState<ActiveRotation | null>(
     null,
   );
@@ -400,7 +399,6 @@ export default function MenuScreen() {
   }
 
   function openCalendarView() {
-    setActiveSegment("calendar");
     router.replace(
       `/menu/calendar?weekStart=${formatDateParam(currentDisplayWeekStart)}` as any,
     );
@@ -431,10 +429,17 @@ export default function MenuScreen() {
   }
 
   function openActionsMenu() {
-    const actions: Array<{ text: string; style?: "cancel" | "destructive"; onPress?: () => void }> = [];
+    const actions: Array<{
+      text: string;
+      style?: "cancel" | "destructive";
+      onPress?: () => void;
+    }> = [];
 
     if (activeMenu) {
-      actions.push({ text: STRINGS.menu.shoppingList, onPress: openShoppingList });
+      actions.push({
+        text: STRINGS.menu.shoppingList,
+        onPress: openShoppingList,
+      });
     }
 
     if (activeRotation || latestRotation) {
@@ -622,7 +627,7 @@ export default function MenuScreen() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: insets.top + Spacing.four,
+            paddingTop: insets.top + Spacing.four + 52,
             paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
           },
         ]}
@@ -671,65 +676,47 @@ export default function MenuScreen() {
                 </View>
               ) : (
                 <View style={styles.activeNameWrap}>
-                  {!!activeMenu.name && (
-                    <ThemedText
-                      themeColor="textSecondary"
-                      style={styles.activeMenuName}
+                  <View style={styles.activeNameTextWrap}>
+                    {!!activeMenu.name && (
+                      <ThemedText
+                        themeColor="textSecondary"
+                        style={styles.activeMenuName}
+                      >
+                        {activeMenu.name}
+                      </ThemedText>
+                    )}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={STRINGS.menu.edit}
+                      onPress={() => setIsEditingName(true)}
+                      style={[
+                        styles.editNameIconButton,
+                        {
+                          backgroundColor: isDarkTheme
+                            ? "rgba(255, 255, 255, 0.08)"
+                            : "rgba(15, 23, 42, 0.06)",
+                          borderColor: isDarkTheme
+                            ? "rgba(255, 255, 255, 0.18)"
+                            : "rgba(15, 23, 42, 0.2)",
+                        },
+                      ]}
                     >
-                      {activeMenu.name}
-                    </ThemedText>
-                  )}
-                  <Pressable onPress={() => setIsEditingName(true)}>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {STRINGS.menu.edit}
-                    </ThemedText>
-                  </Pressable>
+                      <SymbolView
+                        name={{
+                          ios: "pencil",
+                          android: "edit",
+                          web: "edit",
+                        }}
+                        size={16}
+                        weight="medium"
+                        tintColor={theme.textSecondary}
+                      />
+                    </Pressable>
+                  </View>
                 </View>
               ))}
           </View>
-          <View style={styles.headerSide}>
-            <Pressable
-              onPress={openActionsMenu}
-              style={[
-                styles.actionMenuButton,
-                { backgroundColor: theme.backgroundElement },
-              ]}
-            >
-              <ThemedText type="small">⋯</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
-        <View
-          style={[
-            styles.segmentedControl,
-            { backgroundColor: theme.backgroundElement },
-          ]}
-        >
-          <Pressable
-            onPress={() => setActiveSegment("current")}
-            style={[
-              styles.segmentButton,
-              {
-                backgroundColor:
-                  activeSegment === "current" ? theme.background : "transparent",
-              },
-            ]}
-          >
-            <ThemedText type="small">{STRINGS.menu.segmentCurrent}</ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={openCalendarView}
-            style={[
-              styles.segmentButton,
-              {
-                backgroundColor:
-                  activeSegment === "calendar" ? theme.background : "transparent",
-              },
-            ]}
-          >
-            <ThemedText type="small">{STRINGS.menu.segmentCalendar}</ThemedText>
-          </Pressable>
+          <View style={styles.headerSide} />
         </View>
 
         {/* Body */}
@@ -744,56 +731,46 @@ export default function MenuScreen() {
               },
             ]}
           >
-          <View style={styles.rotationHeader}>
-            <ThemedText
-              type="smallBold"
-              themeColor="text"
-            >
-              {STRINGS.menuRotation.currentWeekStatusTitle}
-            </ThemedText>
-            <Pressable
-              onPress={openRotationPlanner}
-              disabled={isLoadingRotation || !hasLoadedRotationContext}
-              style={[
-                styles.rotationActionButton,
-                { backgroundColor: theme.backgroundElement },
-              ]}
-            >
-              <ThemedText type="small">
-                {hasLoadedRotationContext &&
-                !isLoadingRotation &&
-                (activeRotation || latestRotation)
-                  ? STRINGS.menuRotation.manage
-                  : STRINGS.menuRotation.create}
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          {isLoadingRotation ? (
-            <ActivityIndicator color={theme.text} style={styles.rotationLoader} />
-          ) : (
-            <View style={styles.rotationStatusContent}>
-              <View
-                style={[
-                  styles.rotationStatusBadge,
-                  { backgroundColor: theme.accent },
-                ]}
-              >
-                <ThemedText
-                  type="smallBold"
-                  style={{ color: theme.accentText }}
-                >
-                  {STRINGS.menuRotation.inRotationThisWeek}
-                </ThemedText>
+            {isLoadingRotation ? (
+              <ActivityIndicator
+                color={theme.text}
+                style={styles.rotationLoader}
+              />
+            ) : (
+              <View style={styles.rotationStatusContent}>
+                <View style={styles.rotationStatusRow}>
+                  <View
+                    style={[
+                      styles.rotationStatusBadge,
+                      { backgroundColor: theme.accent },
+                    ]}
+                  >
+                    <ThemedText
+                      type="smallBold"
+                      style={{ color: theme.accentText }}
+                    >
+                      {`Rotation: ${activeRotation?.name?.trim() || STRINGS.menu.unnamedMenu}`}
+                    </ThemedText>
+                  </View>
+                  <Pressable
+                    onPress={openRotationPlanner}
+                    disabled={isLoadingRotation || !hasLoadedRotationContext}
+                    style={[
+                      styles.rotationActionButton,
+                      { backgroundColor: theme.backgroundElement },
+                    ]}
+                  >
+                    <ThemedText type="small">
+                      {hasLoadedRotationContext &&
+                      !isLoadingRotation &&
+                      (activeRotation || latestRotation)
+                        ? STRINGS.menuRotation.manage
+                        : STRINGS.menuRotation.create}
+                    </ThemedText>
+                  </Pressable>
+                </View>
               </View>
-              <ThemedText type="small" themeColor="textSecondary">
-                {STRINGS.menuRotation.activeRotationLabel}
-              </ThemedText>
-              <ThemedText type="default" style={styles.rotationName}>
-                {activeRotation?.name?.trim() || STRINGS.menu.unnamedMenu}
-              </ThemedText>
-            </View>
-          )}
+            )}
           </View>
         ) : null}
 
@@ -838,6 +815,60 @@ export default function MenuScreen() {
         )}
       </ScrollView>
 
+      <View
+        style={[
+          styles.fixedGlassButtonGroup,
+          {
+            top: insets.top + Spacing.four,
+            backgroundColor: isDarkTheme
+              ? "rgba(42, 43, 46, 0.7)"
+              : "rgba(248, 250, 252, 0.95)",
+            borderColor: isDarkTheme
+              ? "rgba(255, 255, 255, 0.16)"
+              : "rgba(15, 23, 42, 0.2)",
+          },
+        ]}
+      >
+        <Pressable
+          onPress={openCalendarView}
+          accessibilityRole="button"
+          accessibilityLabel={STRINGS.menu.openCalendar}
+          style={styles.fixedGlassGroupButton}
+        >
+          <SymbolView
+            name={{
+              ios: "calendar",
+              android: "calendar_month",
+              web: "calendar_month",
+            }}
+            size={20}
+            weight="medium"
+            tintColor={isDarkTheme ? "#D0D0D0" : "#4A4A4A"}
+          />
+        </Pressable>
+
+        <View style={styles.fixedGlassGroupDivider} />
+
+        <Pressable
+          onPress={openActionsMenu}
+          accessibilityRole="button"
+          accessibilityLabel={STRINGS.menu.moreActions}
+          style={styles.fixedGlassGroupButton}
+        >
+          <View style={styles.fixedGlassDotsStack}>
+            <View
+              style={[styles.fixedGlassDot, { backgroundColor: "#4A4A4A" }]}
+            />
+            <View
+              style={[styles.fixedGlassDot, { backgroundColor: "#4A4A4A" }]}
+            />
+            <View
+              style={[styles.fixedGlassDot, { backgroundColor: "#4A4A4A" }]}
+            />
+          </View>
+        </Pressable>
+      </View>
+
       <Pressable
         style={[
           styles.fab,
@@ -877,26 +908,45 @@ const styles = StyleSheet.create({
     width: 52,
     alignItems: "flex-end",
   },
-  actionMenuButton: {
-    borderRadius: 8,
-    width: 36,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentedControl: {
+  fixedGlassButtonGroup: {
+    position: "absolute",
+    right: Spacing.three,
+    width: 112,
+    height: 48,
+    borderRadius: 999,
+    borderWidth: 1,
     flexDirection: "row",
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: Spacing.three,
-    gap: 4,
-  },
-  segmentButton: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: Spacing.one,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    zIndex: 10,
+  },
+  fixedGlassGroupButton: {
+    width: 50,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fixedGlassGroupDivider: {
+    width: 1,
+    height: 22,
+    marginHorizontal: 5,
+    backgroundColor: "rgba(120, 120, 120, 0.45)",
+  },
+  fixedGlassDotsStack: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  fixedGlassDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 999,
   },
   rotationCard: {
     borderWidth: 1,
@@ -904,12 +954,6 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
     marginBottom: Spacing.three,
-  },
-  rotationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Spacing.two,
   },
   rotationActionButton: {
     alignSelf: "flex-start",
@@ -922,6 +966,12 @@ const styles = StyleSheet.create({
   },
   rotationStatusContent: {
     gap: Spacing.one,
+  },
+  rotationStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.two,
   },
   rotationStatusBadge: {
     alignSelf: "flex-start",
@@ -963,8 +1013,28 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   activeNameWrap: {
+    width: "100%",
+    minHeight: 24,
     alignItems: "center",
-    gap: 2,
+    justifyContent: "center",
+  },
+  activeNameTextWrap: {
+    alignSelf: "center",
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editNameIconButton: {
+    position: "absolute",
+    right: -34,
+    top: "50%",
+    marginTop: -13,
+    width: 26,
+    height: 26,
+    borderWidth: 1,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
   },
   editNameWrap: {
     width: "100%",

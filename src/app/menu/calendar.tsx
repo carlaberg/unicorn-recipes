@@ -63,8 +63,20 @@ export default function MenuCalendarScreen() {
     }
     return formatDateParam(new Date());
   });
-  const [visibleMonthKey, setVisibleMonthKey] = useState(() => {
+  const [initialCalendarDate] = useState(() => {
     const parsed = new Date(selectedWeekStart);
+    if (Number.isNaN(parsed.getTime())) {
+      return formatDateParam(new Date());
+    }
+
+    // Focus month by end-of-week so cross-month weeks (e.g. Jun 25-Jul 1)
+    // naturally open in the month users expect to plan/edit.
+    const weekEnd = new Date(parsed);
+    weekEnd.setDate(parsed.getDate() + 6);
+    return formatDateParam(weekEnd);
+  });
+  const [visibleMonthKey, setVisibleMonthKey] = useState(() => {
+    const parsed = new Date(initialCalendarDate);
     if (Number.isNaN(parsed.getTime())) {
       const today = new Date();
       return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -76,6 +88,14 @@ export default function MenuCalendarScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isOpening, setIsOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const setVisibleMonthFromYearMonth = useCallback(
+    (year: number, month: number) => {
+      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      setVisibleMonthKey(monthKey);
+    },
+    [],
+  );
 
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -125,39 +145,6 @@ export default function MenuCalendarScreen() {
     }, [loadCalendar]),
   );
 
-  const markedDates = useMemo(() => {
-    const marks: Record<string, any> = {};
-
-    weeks.forEach((week) => {
-      if (week.status === "empty") return;
-
-      const isActiveRotationWeek =
-        week.isActiveRotation === true ||
-        (week.isRotation &&
-          activeRotationId !== null &&
-          week.rotationId === activeRotationId);
-      const dotColor = isActiveRotationWeek
-        ? rotationWeekColor
-        : manualWeekColor;
-      const weekStartDate = new Date(week.startDate);
-      if (Number.isNaN(weekStartDate.getTime())) return;
-
-      for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
-        const day = new Date(weekStartDate);
-        day.setDate(weekStartDate.getDate() + dayOffset);
-        const dayKey = formatDateParam(day);
-
-        marks[dayKey] = {
-          ...(marks[dayKey] ?? {}),
-          marked: true,
-          dotColor,
-        };
-      }
-    });
-
-    return marks;
-  }, [activeRotationId, weeks, manualWeekColor]);
-
   const weeksInVisibleMonth = useMemo(() => {
     const monthStart = new Date(`${visibleMonthKey}-01T00:00:00`);
     if (Number.isNaN(monthStart.getTime())) return [];
@@ -178,6 +165,92 @@ export default function MenuCalendarScreen() {
       return weekStart <= monthEnd && weekEnd >= monthStart;
     });
   }, [visibleMonthKey, weeks]);
+
+  const markedDates = useMemo(() => {
+    const marks: Record<string, any> = {};
+
+    // Find the earliest start date of the active rotation (if any)
+    let activeRotationStartDate: Date | null = null;
+    weeks.forEach((week) => {
+      if (
+        week.isActiveRotation === true ||
+        (week.isRotation &&
+          activeRotationId !== null &&
+          week.rotationId === activeRotationId)
+      ) {
+        const weekStart = new Date(week.startDate);
+        if (Number.isNaN(weekStart.getTime())) return;
+        if (!activeRotationStartDate || weekStart < activeRotationStartDate) {
+          activeRotationStartDate = weekStart;
+        }
+      }
+    });
+
+    // Mark all days from active rotation start onwards (including gray days from prev/next month)
+    if (activeRotationStartDate) {
+      const monthStart = new Date(`${visibleMonthKey}-01T00:00:00`);
+      const monthEnd = new Date(monthStart);
+      monthEnd.setMonth(monthStart.getMonth() + 1, 0);
+      monthEnd.setHours(23, 59, 59, 999);
+
+      let currentDate = new Date(activeRotationStartDate);
+      // Mark up to end of visible month + buffer for gray days from next month
+      const bufferEnd = new Date(monthEnd);
+      bufferEnd.setDate(bufferEnd.getDate() + 7);
+
+      while (currentDate <= bufferEnd) {
+        const dayKey = formatDateParam(currentDate);
+        marks[dayKey] = {
+          ...(marks[dayKey] ?? {}),
+          marked: true,
+          dotColor: rotationWeekColor,
+        };
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
+    weeksInVisibleMonth.forEach((week) => {
+      if (week.status === "empty") return;
+
+      const isActiveRotationWeek =
+        week.isActiveRotation === true ||
+        (week.isRotation &&
+          activeRotationId !== null &&
+          week.rotationId === activeRotationId);
+
+      // Skip marking if already marked by active rotation span above
+      if (isActiveRotationWeek) return;
+
+      const dotColor = manualWeekColor;
+      const weekStartDate = new Date(week.startDate);
+      if (Number.isNaN(weekStartDate.getTime())) return;
+
+      for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+        const day = new Date(weekStartDate);
+        day.setDate(weekStartDate.getDate() + dayOffset);
+
+        // Keep dot rendering aligned with the visible-month week list.
+        const dayMonthKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}`;
+        if (dayMonthKey !== visibleMonthKey) continue;
+
+        const dayKey = formatDateParam(day);
+        marks[dayKey] = {
+          ...(marks[dayKey] ?? {}),
+          marked: true,
+          dotColor,
+        };
+      }
+    });
+
+    return marks;
+  }, [
+    activeRotationId,
+    manualWeekColor,
+    rotationWeekColor,
+    visibleMonthKey,
+    weeksInVisibleMonth,
+    weeks,
+  ]);
 
   async function openWeek(week: CalendarWeek) {
     if (isOpening || week.status === "empty") return;
@@ -214,11 +287,14 @@ export default function MenuCalendarScreen() {
     }
   }
 
-  function openCurrentMenuView() {
-    router.replace(
-      `/menu?weekStart=${selectedWeekStart}&refreshToken=${Date.now()}` as any,
-    );
+  function handleBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/menu" as any);
   }
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -230,22 +306,17 @@ export default function MenuCalendarScreen() {
           },
         ]}
       >
-        <ThemedText type="subtitle">{STRINGS.menu.calendarTitle}</ThemedText>
-        <View
+        <Pressable
+          onPress={handleBack}
           style={[
-            styles.segmentedControl,
+            styles.backButton,
             { backgroundColor: theme.backgroundElement },
           ]}
         >
-          <Pressable onPress={openCurrentMenuView} style={styles.segmentButton}>
-            <ThemedText type="small">{STRINGS.menu.segmentCurrent}</ThemedText>
-          </Pressable>
-          <View
-            style={[styles.segmentButton, { backgroundColor: theme.background }]}
-          >
-            <ThemedText type="small">{STRINGS.menu.segmentCalendar}</ThemedText>
-          </View>
-        </View>
+          <ThemedText type="small">{STRINGS.shopping.back}</ThemedText>
+        </Pressable>
+
+        <ThemedText type="subtitle">{STRINGS.menu.calendarTitle}</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.hintText}>
           {STRINGS.menu.calendarHint}
         </ThemedText>
@@ -276,12 +347,20 @@ export default function MenuCalendarScreen() {
           ]}
         >
           <Calendar
+            current={initialCalendarDate}
             firstDay={1}
             markedDates={markedDates}
             enableSwipeMonths
             onMonthChange={(month) => {
-              const monthKey = `${month.year}-${String(month.month).padStart(2, "0")}`;
-              setVisibleMonthKey(monthKey);
+              setVisibleMonthFromYearMonth(month.year, month.month);
+            }}
+            onVisibleMonthsChange={(months) => {
+              const firstVisibleMonth = months?.[0];
+              if (!firstVisibleMonth) return;
+              setVisibleMonthFromYearMonth(
+                firstVisibleMonth.year,
+                firstVisibleMonth.month,
+              );
             }}
             theme={{
               backgroundColor: theme.background,
@@ -368,18 +447,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     gap: Spacing.two,
   },
-  segmentedControl: {
-    flexDirection: "row",
-    borderRadius: 12,
-    padding: 4,
-    gap: 4,
-  },
-  segmentButton: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: Spacing.one,
-    alignItems: "center",
-    justifyContent: "center",
+  backButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   hintText: {
     marginBottom: Spacing.one,
