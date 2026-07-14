@@ -8,6 +8,18 @@ export const DAY_NAMES = [
   "Söndag",
 ] as const;
 
+export function getDayNamesFromStartDate(startDate: Date) {
+  const base = new Date(startDate);
+  const startDay = base.getDay();
+  const labels = [...DAY_NAMES];
+
+  // Convert JS day index (Sun=0) to Monday-first index (Mon=0..Sun=6).
+  const mondayFirstStart = startDay === 0 ? 6 : startDay - 1;
+  return labels
+    .slice(mondayFirstStart)
+    .concat(labels.slice(0, mondayFirstStart));
+}
+
 const MONTH_NAMES = [
   "jan",
   "feb",

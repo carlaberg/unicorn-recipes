@@ -1,15 +1,16 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,11 +21,10 @@ import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 import {
-  DAY_NAMES,
-  formatDateParam,
-  formatWeekRange,
-  getWeekStart,
-  isSameDay,
+    formatDateParam,
+    formatWeekRange,
+    getDayNamesFromStartDate,
+    isSameDay,
 } from "@/lib/date-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,9 +54,29 @@ type WeeklyMenu = {
   isTemplate?: boolean;
   tags?: string[];
   startDate: string | null;
+  rotationId?: number | null;
+  rotationWeekIndex?: number | null;
   createdAt?: string;
   updatedAt?: string;
   menuEntries: MenuEntry[];
+};
+
+type RotationTemplateRef = {
+  id: number;
+  templateMenuId: number;
+  orderIndex: number;
+  templateMenu: {
+    id: number;
+    name: string | null;
+  };
+};
+
+type ActiveRotation = {
+  id: number;
+  name: string | null;
+  startDate: string;
+  isActive: boolean;
+  templates: RotationTemplateRef[];
 };
 
 // ─── Slot component ───────────────────────────────────────────────────────────
@@ -186,6 +206,7 @@ function DayRow({
 export default function MenuScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const isDarkTheme = theme.background === "#000000";
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   const { refreshToken, weekStart } = useLocalSearchParams<{
@@ -205,6 +226,15 @@ export default function MenuScreen() {
   const [editedMenuName, setEditedMenuName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [isDeletingMenu, setIsDeletingMenu] = useState(false);
+  const [activeRotation, setActiveRotation] = useState<ActiveRotation | null>(
+    null,
+  );
+  const [latestRotation, setLatestRotation] = useState<ActiveRotation | null>(
+    null,
+  );
+  const [isLoadingRotation, setIsLoadingRotation] = useState(false);
+  const [hasLoadedRotationContext, setHasLoadedRotationContext] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -239,28 +269,39 @@ export default function MenuScreen() {
     });
   }
 
-  function isDateWithinWeek(date: Date, referenceDate: Date) {
-    const weekStart = getWeekStart(referenceDate);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
+  function isDateWithinMenuPeriod(menuStartDate: Date, referenceDate: Date) {
+    const periodStart = new Date(menuStartDate);
+    periodStart.setHours(0, 0, 0, 0);
 
-    const normalized = new Date(date);
-    normalized.setHours(0, 0, 0, 0);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setDate(periodStart.getDate() + 6);
+
+    const normalizedReference = new Date(referenceDate);
+    normalizedReference.setHours(0, 0, 0, 0);
 
     return (
-      normalized.getTime() >= weekStart.getTime() &&
-      normalized.getTime() <= weekEnd.getTime()
+      normalizedReference.getTime() >= periodStart.getTime() &&
+      normalizedReference.getTime() <= periodEnd.getTime()
     );
   }
 
   const fetchMenus = useCallback(
-    async (weekStartToPrioritize: Date, keepMenuId?: number) => {
+    async (weekStartToPrioritize: Date) => {
       if (!isLoaded || !isSignedIn) return;
 
       setIsLoading(true);
       setError(null);
 
       try {
+        // Lazy materialization: ensure a menu exists for this week if an active rotation covers it.
+        await authorizedFetch("/me/menus/resolve-week", getTokenRef.current, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startDate: formatDateParam(weekStartToPrioritize),
+          }),
+        });
+
         const res = await authorizedFetch(
           "/me/menus/planned",
           getTokenRef.current,
@@ -278,24 +319,15 @@ export default function MenuScreen() {
           return;
         }
 
-        if (keepMenuId !== undefined) {
-          const keepIndex = sortedMenus.findIndex(
-            (menu) => menu.id === keepMenuId,
-          );
-          if (keepIndex >= 0) {
-            setActiveMenuIndex(keepIndex);
-            return;
-          }
-        }
-
         const currentWeekIndex = sortedMenus.findIndex((m) => {
           if (!m.startDate) return false;
-          return isDateWithinWeek(new Date(m.startDate), weekStartToPrioritize);
+          return isDateWithinMenuPeriod(
+            new Date(m.startDate),
+            weekStartToPrioritize,
+          );
         });
 
-        setActiveMenuIndex(
-          currentWeekIndex >= 0 ? currentWeekIndex : sortedMenus.length - 1,
-        );
+        setActiveMenuIndex(currentWeekIndex >= 0 ? currentWeekIndex : -1);
       } catch (e) {
         setError(e instanceof Error ? e.message : STRINGS.menu.genericError);
       } finally {
@@ -305,35 +337,71 @@ export default function MenuScreen() {
     [isLoaded, isSignedIn],
   );
 
+  const fetchRotationContext = useCallback(async () => {
+    if (!isLoaded || !isSignedIn) return;
+
+    setHasLoadedRotationContext(false);
+    setIsLoadingRotation(true);
+    setActiveRotation(null);
+    setLatestRotation(null);
+    try {
+      const [activeRes, rotationsRes] = await Promise.all([
+        authorizedFetch("/me/menus/rotations/active", getTokenRef.current),
+        authorizedFetch("/me/menus/rotations", getTokenRef.current),
+      ]);
+
+      if (!activeRes.ok) {
+        throw new Error(
+          `${STRINGS.menuRotation.loadFailed} (${activeRes.status})`,
+        );
+      }
+
+      if (!rotationsRes.ok) {
+        throw new Error(
+          `${STRINGS.menuRotation.loadFailed} (${rotationsRes.status})`,
+        );
+      }
+
+      const active = (await activeRes.json()) as ActiveRotation | null;
+      const rotations = (await rotationsRes.json()) as ActiveRotation[];
+      setActiveRotation(active);
+      setLatestRotation(rotations[0] ?? null);
+    } catch {
+      setActiveRotation(null);
+      setLatestRotation(null);
+    } finally {
+      setIsLoadingRotation(false);
+      setHasLoadedRotationContext(true);
+    }
+  }, [isLoaded, isSignedIn]);
+
   useFocusEffect(
     useCallback(() => {
-      fetchMenus(preferredWeekStart, activeMenu?.id);
-    }, [fetchMenus, preferredWeekStart, activeMenu?.id]),
+      fetchMenus(preferredWeekStart);
+      fetchRotationContext();
+    }, [fetchMenus, preferredWeekStart, fetchRotationContext]),
   );
 
   useEffect(() => {
     if (!refreshToken || Array.isArray(refreshToken)) return;
-    fetchMenus(preferredWeekStart, activeMenu?.id);
-  }, [refreshToken, preferredWeekStart, fetchMenus, activeMenu?.id]);
+    fetchMenus(preferredWeekStart);
+    fetchRotationContext();
+  }, [refreshToken, preferredWeekStart, fetchMenus, fetchRotationContext]);
 
   useEffect(() => {
     setEditedMenuName(activeMenu?.name?.trim() ?? "");
     setIsEditingName(false);
   }, [activeMenu?.id, activeMenu?.name]);
 
-  function navigateMenu(delta: number) {
-    setActiveMenuIndex((prev) => {
-      if (menusInDateOrder.length === 0) return -1;
-      const current = prev < 0 ? 0 : prev;
-      const next = current + delta;
-      if (next < 0 || next >= menusInDateOrder.length) return current;
-      return next;
-    });
-  }
-
   function openShoppingList() {
     if (!activeMenu) return;
     router.push(`/menu/shopping?menuId=${activeMenu.id}` as any);
+  }
+
+  function openCalendarView() {
+    router.replace(
+      `/menu/calendar?weekStart=${formatDateParam(currentDisplayWeekStart)}` as any,
+    );
   }
 
   function openPlanFlow() {
@@ -343,6 +411,59 @@ export default function MenuScreen() {
     router.push(
       `/menu/plan?weekStart=${formatDateParam(weekStartForPlan)}` as any,
     );
+  }
+
+  function openNewRotation() {
+    router.push("/menu/rotation" as any);
+  }
+
+  function openRotationPlanner() {
+    if (isLoadingRotation || !hasLoadedRotationContext) return;
+
+    const rotationId = activeRotation?.id ?? latestRotation?.id;
+    if (rotationId) {
+      router.push(`/menu/rotation?rotationId=${rotationId}` as any);
+      return;
+    }
+    router.push("/menu/rotation" as any);
+  }
+
+  function openActionsMenu() {
+    const actions: Array<{
+      text: string;
+      style?: "cancel" | "destructive";
+      onPress?: () => void;
+    }> = [];
+
+    if (activeMenu) {
+      actions.push({
+        text: STRINGS.menu.shoppingList,
+        onPress: openShoppingList,
+      });
+    }
+
+    if (activeRotation || latestRotation) {
+      actions.push({
+        text: activeRotation
+          ? STRINGS.menu.manageRotation
+          : STRINGS.menu.reactivateRotation,
+        onPress: openRotationPlanner,
+      });
+    }
+
+    actions.push({ text: STRINGS.menu.newRotation, onPress: openNewRotation });
+
+    if (activeMenu) {
+      actions.push({
+        text: STRINGS.menu.delete,
+        style: "destructive",
+        onPress: confirmDeleteMenu,
+      });
+    }
+
+    actions.push({ text: STRINGS.menu.cancel, style: "cancel" });
+
+    Alert.alert(STRINGS.menu.moreActions, undefined, actions);
   }
 
   async function removeEntry(entry: MenuEntry) {
@@ -367,7 +488,7 @@ export default function MenuScreen() {
       );
     } catch {
       // silent — re-fetch will reconcile
-      await fetchMenus(preferredWeekStart, activeMenu?.id);
+      await fetchMenus(preferredWeekStart);
     }
   }
 
@@ -475,6 +596,25 @@ export default function MenuScreen() {
   const currentDisplayWeekStart = activeMenu?.startDate
     ? new Date(activeMenu.startDate)
     : preferredWeekStart;
+  const currentDayLabels = getDayNamesFromStartDate(currentDisplayWeekStart);
+  const isDisplayedPeriodOnOrAfterActiveRotationStart = (() => {
+    if (!activeRotation) return false;
+
+    const displayedStart = new Date(currentDisplayWeekStart);
+    displayedStart.setHours(0, 0, 0, 0);
+
+    const rotationStart = new Date(activeRotation.startDate);
+    rotationStart.setHours(0, 0, 0, 0);
+
+    return displayedStart.getTime() >= rotationStart.getTime();
+  })();
+
+  const isCurrentWeekInActiveRotation =
+    !!activeRotation &&
+    ((!!activeMenu &&
+      activeMenu.rotationId != null &&
+      activeMenu.rotationId === activeRotation.id) ||
+      isDisplayedPeriodOnOrAfterActiveRotationStart);
 
   function handleOpenRecipe(entry: MenuEntry) {
     if (!entry.recipe) return;
@@ -487,24 +627,14 @@ export default function MenuScreen() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: insets.top + Spacing.four,
+            paddingTop: insets.top + Spacing.four + 52,
             paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
           },
         ]}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable
-            onPress={() => navigateMenu(-1)}
-            hitSlop={12}
-            style={[
-              styles.navArrow,
-              activeMenuIndex <= 0 && styles.navArrowDisabled,
-            ]}
-            disabled={activeMenuIndex <= 0}
-          >
-            <ThemedText style={styles.arrowText}>‹</ThemedText>
-          </Pressable>
+          <View style={styles.headerSide} />
           <View style={styles.weekLabelWrap}>
             <ThemedText type="subtitle" style={styles.weekLabel}>
               {formatWeekRange(currentDisplayWeekStart)}
@@ -546,70 +676,103 @@ export default function MenuScreen() {
                 </View>
               ) : (
                 <View style={styles.activeNameWrap}>
-                  {!!activeMenu.name && (
-                    <ThemedText
-                      themeColor="textSecondary"
-                      style={styles.activeMenuName}
+                  <View style={styles.activeNameTextWrap}>
+                    {!!activeMenu.name && (
+                      <ThemedText
+                        themeColor="textSecondary"
+                        style={styles.activeMenuName}
+                      >
+                        {activeMenu.name}
+                      </ThemedText>
+                    )}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={STRINGS.menu.edit}
+                      onPress={() => setIsEditingName(true)}
+                      style={[
+                        styles.editNameIconButton,
+                        {
+                          backgroundColor: isDarkTheme
+                            ? "rgba(255, 255, 255, 0.08)"
+                            : "rgba(15, 23, 42, 0.06)",
+                          borderColor: isDarkTheme
+                            ? "rgba(255, 255, 255, 0.18)"
+                            : "rgba(15, 23, 42, 0.2)",
+                        },
+                      ]}
                     >
-                      {activeMenu.name}
-                    </ThemedText>
-                  )}
-                  <Pressable onPress={() => setIsEditingName(true)}>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {STRINGS.menu.edit}
-                    </ThemedText>
-                  </Pressable>
+                      <SymbolView
+                        name={{
+                          ios: "pencil",
+                          android: "edit",
+                          web: "edit",
+                        }}
+                        size={16}
+                        weight="medium"
+                        tintColor={theme.textSecondary}
+                      />
+                    </Pressable>
+                  </View>
                 </View>
               ))}
           </View>
-          <Pressable
-            onPress={() => navigateMenu(1)}
-            hitSlop={12}
-            style={[
-              styles.navArrow,
-              (activeMenuIndex < 0 ||
-                activeMenuIndex >= menusInDateOrder.length - 1) &&
-                styles.navArrowDisabled,
-            ]}
-            disabled={
-              activeMenuIndex < 0 ||
-              activeMenuIndex >= menusInDateOrder.length - 1
-            }
-          >
-            <ThemedText style={styles.arrowText}>›</ThemedText>
-          </Pressable>
+          <View style={styles.headerSide} />
         </View>
 
         {/* Body */}
 
-        {!!activeMenu && (
-          <Pressable
+        {isCurrentWeekInActiveRotation && activeRotation ? (
+          <View
             style={[
-              styles.shoppingButton,
-              { backgroundColor: theme.backgroundElement },
-            ]}
-            onPress={openShoppingList}
-          >
-            <ThemedText>{STRINGS.menu.shoppingList}</ThemedText>
-          </Pressable>
-        )}
-        {!!activeMenu && (
-          <Pressable
-            style={[
-              styles.deleteMenuButton,
+              styles.rotationCard,
               {
-                backgroundColor: theme.backgroundElement,
-                opacity: isDeletingMenu ? 0.7 : 1,
+                borderColor: theme.accent,
+                backgroundColor: theme.background,
               },
             ]}
-            onPress={confirmDeleteMenu}
-            disabled={isDeletingMenu}
           >
-            <ThemedText>
-              {isDeletingMenu ? STRINGS.menu.deleting : STRINGS.menu.delete}
-            </ThemedText>
-          </Pressable>
-        )}
+            {isLoadingRotation ? (
+              <ActivityIndicator
+                color={theme.text}
+                style={styles.rotationLoader}
+              />
+            ) : (
+              <View style={styles.rotationStatusContent}>
+                <View style={styles.rotationStatusRow}>
+                  <View
+                    style={[
+                      styles.rotationStatusBadge,
+                      { backgroundColor: theme.accent },
+                    ]}
+                  >
+                    <ThemedText
+                      type="smallBold"
+                      style={{ color: theme.accentText }}
+                    >
+                      {`Rotation: ${activeRotation?.name?.trim() || STRINGS.menu.unnamedMenu}`}
+                    </ThemedText>
+                  </View>
+                  <Pressable
+                    onPress={openRotationPlanner}
+                    disabled={isLoadingRotation || !hasLoadedRotationContext}
+                    style={[
+                      styles.rotationActionButton,
+                      { backgroundColor: theme.backgroundElement },
+                    ]}
+                  >
+                    <ThemedText type="small">
+                      {hasLoadedRotationContext &&
+                      !isLoadingRotation &&
+                      (activeRotation || latestRotation)
+                        ? STRINGS.menuRotation.manage
+                        : STRINGS.menuRotation.create}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+        ) : null}
 
         {isLoading ? (
           <ActivityIndicator color={theme.text} style={styles.loader} />
@@ -634,18 +797,9 @@ export default function MenuScreen() {
             >
               <ThemedText>{STRINGS.menu.planWeek}</ThemedText>
             </Pressable>
-            <Pressable
-              style={[
-                styles.createButton,
-                { backgroundColor: theme.backgroundElement },
-              ]}
-              onPress={openPlanFlow}
-            >
-              <ThemedText>{STRINGS.menu.planWeek}</ThemedText>
-            </Pressable>
           </View>
         ) : (
-          DAY_NAMES.map((name, index) => (
+          currentDayLabels.map((name, index) => (
             <DayRow
               key={index}
               dayOffset={index}
@@ -660,6 +814,60 @@ export default function MenuScreen() {
           ))
         )}
       </ScrollView>
+
+      <View
+        style={[
+          styles.fixedGlassButtonGroup,
+          {
+            top: insets.top + Spacing.four,
+            backgroundColor: isDarkTheme
+              ? "rgba(42, 43, 46, 0.7)"
+              : "rgba(248, 250, 252, 0.95)",
+            borderColor: isDarkTheme
+              ? "rgba(255, 255, 255, 0.16)"
+              : "rgba(15, 23, 42, 0.2)",
+          },
+        ]}
+      >
+        <Pressable
+          onPress={openCalendarView}
+          accessibilityRole="button"
+          accessibilityLabel={STRINGS.menu.openCalendar}
+          style={styles.fixedGlassGroupButton}
+        >
+          <SymbolView
+            name={{
+              ios: "calendar",
+              android: "calendar_month",
+              web: "calendar_month",
+            }}
+            size={20}
+            weight="medium"
+            tintColor={isDarkTheme ? "#D0D0D0" : "#4A4A4A"}
+          />
+        </Pressable>
+
+        <View style={styles.fixedGlassGroupDivider} />
+
+        <Pressable
+          onPress={openActionsMenu}
+          accessibilityRole="button"
+          accessibilityLabel={STRINGS.menu.moreActions}
+          style={styles.fixedGlassGroupButton}
+        >
+          <View style={styles.fixedGlassDotsStack}>
+            <View
+              style={[styles.fixedGlassDot, { backgroundColor: "#4A4A4A" }]}
+            />
+            <View
+              style={[styles.fixedGlassDot, { backgroundColor: "#4A4A4A" }]}
+            />
+            <View
+              style={[styles.fixedGlassDot, { backgroundColor: "#4A4A4A" }]}
+            />
+          </View>
+        </Pressable>
+      </View>
 
       <Pressable
         style={[
@@ -696,6 +904,84 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: Spacing.three,
   },
+  headerSide: {
+    width: 52,
+    alignItems: "flex-end",
+  },
+  fixedGlassButtonGroup: {
+    position: "absolute",
+    right: Spacing.three,
+    width: 112,
+    height: 48,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    zIndex: 10,
+  },
+  fixedGlassGroupButton: {
+    width: 50,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fixedGlassGroupDivider: {
+    width: 1,
+    height: 22,
+    marginHorizontal: 5,
+    backgroundColor: "rgba(120, 120, 120, 0.45)",
+  },
+  fixedGlassDotsStack: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  fixedGlassDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 999,
+  },
+  rotationCard: {
+    borderWidth: 1,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+    marginBottom: Spacing.three,
+  },
+  rotationActionButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: 8,
+  },
+  rotationLoader: {
+    marginVertical: Spacing.one,
+  },
+  rotationStatusContent: {
+    gap: Spacing.one,
+  },
+  rotationStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.two,
+  },
+  rotationStatusBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: 999,
+  },
+  rotationName: {
+    fontWeight: "600",
+  },
   fab: {
     position: "absolute",
     right: Spacing.three,
@@ -727,8 +1013,28 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   activeNameWrap: {
+    width: "100%",
+    minHeight: 24,
     alignItems: "center",
-    gap: 2,
+    justifyContent: "center",
+  },
+  activeNameTextWrap: {
+    alignSelf: "center",
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editNameIconButton: {
+    position: "absolute",
+    right: -34,
+    top: "50%",
+    marginTop: -13,
+    width: 26,
+    height: 26,
+    borderWidth: 1,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
   },
   editNameWrap: {
     width: "100%",
@@ -747,33 +1053,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.three,
   },
-  navArrow: {
-    width: 36,
-    alignItems: "center",
-  },
-  navArrowDisabled: {
-    opacity: 0.35,
-  },
-  arrowText: {
-    fontSize: 28,
-    lineHeight: 32,
-  },
   loader: {
     marginTop: Spacing.five,
-  },
-  shoppingButton: {
-    alignSelf: "center",
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 8,
-    marginBottom: Spacing.two,
-  },
-  deleteMenuButton: {
-    alignSelf: "center",
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 8,
-    marginBottom: Spacing.three,
   },
   emptyState: {
     alignItems: "center",
