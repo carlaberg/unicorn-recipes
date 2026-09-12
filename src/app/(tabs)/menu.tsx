@@ -285,6 +285,10 @@ export default function MenuScreen() {
     );
   }
 
+  /**
+   * Select the most relevant menu period for a date when periods overlap.
+   * Tie-break order: latest startDate first, then highest menu id.
+   */
   function findPreferredMenuIndexForDate(
     sortedMenus: WeeklyMenu[],
     weekStartToPrioritize: Date,
