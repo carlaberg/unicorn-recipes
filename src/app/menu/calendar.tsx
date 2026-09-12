@@ -23,7 +23,7 @@ import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
-import { formatDateParam } from "@/lib/date-utils";
+import { formatDateParam, parseDateParam } from "@/lib/date-utils";
 
 type CalendarWeek = {
   startDate: string;
@@ -57,15 +57,15 @@ export default function MenuCalendarScreen() {
   const manualWeekColor = theme.accent;
 
   const [selectedWeekStart] = useState(() => {
-    const parsed = new Date(String(params.weekStart ?? ""));
-    if (!Number.isNaN(parsed.getTime())) {
+    const parsed = parseDateParam(String(params.weekStart ?? ""));
+    if (parsed) {
       return formatDateParam(parsed);
     }
     return formatDateParam(new Date());
   });
   const [initialCalendarDate] = useState(() => {
-    const parsed = new Date(selectedWeekStart);
-    if (Number.isNaN(parsed.getTime())) {
+    const parsed = parseDateParam(selectedWeekStart);
+    if (!parsed) {
       return formatDateParam(new Date());
     }
 
@@ -76,8 +76,8 @@ export default function MenuCalendarScreen() {
     return formatDateParam(weekEnd);
   });
   const [visibleMonthKey, setVisibleMonthKey] = useState(() => {
-    const parsed = new Date(initialCalendarDate);
-    if (Number.isNaN(parsed.getTime())) {
+    const parsed = parseDateParam(initialCalendarDate);
+    if (!parsed) {
       const today = new Date();
       return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
     }
@@ -108,9 +108,16 @@ export default function MenuCalendarScreen() {
     setError(null);
 
     try {
+      const calendarRangeStart = parseDateParam(selectedWeekStart);
+      if (!calendarRangeStart) {
+        throw new Error(STRINGS.menu.genericError);
+      }
+
+      calendarRangeStart.setDate(calendarRangeStart.getDate() - 26 * 7);
+
       const [calendarResponse, activeRotationResponse] = await Promise.all([
         authorizedFetch(
-          `/me/menus/calendar?startDate=${selectedWeekStart}&weeks=26`,
+          `/me/menus/calendar?startDate=${formatDateParam(calendarRangeStart)}&weeks=52`,
           getTokenRef.current,
         ),
         authorizedFetch("/me/menus/rotations/active", getTokenRef.current),
@@ -154,8 +161,8 @@ export default function MenuCalendarScreen() {
     monthEnd.setHours(23, 59, 59, 999);
 
     return weeks.filter((week) => {
-      const weekStart = new Date(week.startDate);
-      if (Number.isNaN(weekStart.getTime())) return false;
+      const weekStart = parseDateParam(week.startDate);
+      if (!weekStart) return false;
 
       weekStart.setHours(0, 0, 0, 0);
       const weekEnd = new Date(weekStart);
@@ -178,8 +185,8 @@ export default function MenuCalendarScreen() {
           activeRotationId !== null &&
           week.rotationId === activeRotationId)
       ) {
-        const weekStart = new Date(week.startDate);
-        if (Number.isNaN(weekStart.getTime())) return;
+        const weekStart = parseDateParam(week.startDate);
+        if (!weekStart) return;
         if (!activeRotationStartDate || weekStart < activeRotationStartDate) {
           activeRotationStartDate = weekStart;
         }
@@ -222,8 +229,8 @@ export default function MenuCalendarScreen() {
       if (isActiveRotationWeek) return;
 
       const dotColor = manualWeekColor;
-      const weekStartDate = new Date(week.startDate);
-      if (Number.isNaN(weekStartDate.getTime())) return;
+      const weekStartDate = parseDateParam(week.startDate);
+      if (!weekStartDate) return;
 
       for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
         const day = new Date(weekStartDate);

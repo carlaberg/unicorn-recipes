@@ -53,6 +53,31 @@ export function formatDateParam(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Parses a date-only API value at local midnight instead of interpreting it as UTC. */
+export function parseDateParam(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  );
+
+  if (
+    parsed.getFullYear() !== Number(match[1]) ||
+    parsed.getMonth() !== Number(match[2]) - 1 ||
+    parsed.getDate() !== Number(match[3])
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
 /** Returns e.g. "18 maj – 24 maj" for the Mon–Sun week starting at `start`. */
 export function formatWeekRange(start: Date): string {
   const end = new Date(start);

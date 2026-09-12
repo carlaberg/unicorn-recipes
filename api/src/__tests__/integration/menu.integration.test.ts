@@ -98,6 +98,7 @@ describe("Menu API Integration Tests", () => {
           },
         ],
       } as any)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         id: 11,
         userId: 1,
@@ -135,5 +136,72 @@ describe("Menu API Integration Tests", () => {
       }),
     );
     expect(vi.mocked(db.menuEntry.createMany)).toHaveBeenCalled();
+  });
+
+  it("rejects a planned menu that overlaps an existing visible menu", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/me/menus",
+      headers: { "x-user-id": "1", "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Overlapping menu",
+        startDate: "2026-06-18",
+      }),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(vi.mocked(db.weeklyMenu.create)).not.toHaveBeenCalled();
+  });
+
+  it("maps template weekdays to a non-Monday planned start date", async () => {
+    vi.mocked(db.weeklyMenu.findFirst)
+      .mockResolvedValueOnce({
+        id: 10,
+        userId: 1,
+        name: "Meny Mall",
+        menuEntries: [
+          {
+            dayOffset: 0,
+            mealType: "LUNCH",
+            recipeId: 22,
+            note: null,
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 11,
+        userId: 1,
+        name: "Meny Mall",
+        startDate: new Date("2026-06-18"),
+        menuEntries: [],
+      } as any);
+
+    vi.mocked(db.weeklyMenu.create).mockResolvedValue({
+      id: 11,
+      userId: 1,
+      name: "Meny Mall",
+      startDate: new Date("2026-06-18"),
+    } as any);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/me/menus/plan",
+      headers: { "x-user-id": "1", "content-type": "application/json" },
+      body: JSON.stringify({
+        templateMenuId: 10,
+        startDate: "2026-06-18",
+      }),
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(vi.mocked(db.menuEntry.createMany)).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          weeklyMenuId: 11,
+          dayOffset: 4,
+        }),
+      ],
+    });
   });
 });

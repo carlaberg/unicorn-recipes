@@ -49,6 +49,7 @@ export default function MenuPickScreen() {
   }>();
 
   const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
+  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +98,13 @@ export default function MenuPickScreen() {
       cancelled = true;
     };
   }, [isLoaded, isSignedIn]);
+
+  const normalizedSearch = search.trim().toLocaleLowerCase("sv");
+  const filteredRecipes = normalizedSearch
+    ? recipes.filter((recipe) =>
+        recipe.name.toLocaleLowerCase("sv").includes(normalizedSearch),
+      )
+    : recipes;
 
   function getReturnHref() {
     if (returnTo === "template") {
@@ -278,7 +286,7 @@ export default function MenuPickScreen() {
         </View>
       ) : (
         <FlatList
-          data={recipes}
+          data={filteredRecipes}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={[
             styles.list,
@@ -287,6 +295,18 @@ export default function MenuPickScreen() {
               paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
             },
           ]}
+          ListHeaderComponent={
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder={STRINGS.menuPick.searchPlaceholder}
+              placeholderTextColor={theme.textSecondary}
+              style={[
+                styles.searchInput,
+                { borderColor: theme.backgroundElement, color: theme.text },
+              ]}
+            />
+          }
           renderItem={({ item }) => (
             <Pressable
               style={[
@@ -313,7 +333,9 @@ export default function MenuPickScreen() {
               </ThemedText>
             ) : (
               <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-                {STRINGS.menuPick.empty}
+                {normalizedSearch
+                  ? STRINGS.menuPick.noSearchResults
+                  : STRINGS.menuPick.empty}
               </ThemedText>
             )
           }
@@ -335,6 +357,13 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: Spacing.three,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    marginBottom: Spacing.two,
   },
   typeSelector: {
     flexDirection: "row",

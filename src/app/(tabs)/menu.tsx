@@ -285,6 +285,43 @@ export default function MenuScreen() {
     );
   }
 
+  /**
+   * Select the most relevant menu period for a date when periods overlap.
+   * Tie-break order: latest startDate first, then highest menu id.
+   */
+  function findPreferredMenuIndexForDate(
+    sortedMenus: WeeklyMenu[],
+    weekStartToPrioritize: Date,
+  ) {
+    let candidateIndex = -1;
+    let candidateStartTime = Number.NEGATIVE_INFINITY;
+    let candidateId = Number.NEGATIVE_INFINITY;
+
+    sortedMenus.forEach((menu, index) => {
+      if (!menu.startDate) return;
+
+      const parsedStartDate = new Date(menu.startDate);
+      if (
+        Number.isNaN(parsedStartDate.getTime()) ||
+        !isDateWithinMenuPeriod(parsedStartDate, weekStartToPrioritize)
+      ) {
+        return;
+      }
+
+      const startTime = parsedStartDate.getTime();
+      if (
+        startTime > candidateStartTime ||
+        (startTime === candidateStartTime && menu.id > candidateId)
+      ) {
+        candidateIndex = index;
+        candidateStartTime = startTime;
+        candidateId = menu.id;
+      }
+    });
+
+    return candidateIndex;
+  }
+
   const fetchMenus = useCallback(
     async (weekStartToPrioritize: Date) => {
       if (!isLoaded || !isSignedIn) return;
@@ -319,13 +356,10 @@ export default function MenuScreen() {
           return;
         }
 
-        const currentWeekIndex = sortedMenus.findIndex((m) => {
-          if (!m.startDate) return false;
-          return isDateWithinMenuPeriod(
-            new Date(m.startDate),
-            weekStartToPrioritize,
-          );
-        });
+        const currentWeekIndex = findPreferredMenuIndexForDate(
+          sortedMenus,
+          weekStartToPrioritize,
+        );
 
         setActiveMenuIndex(currentWeekIndex >= 0 ? currentWeekIndex : -1);
       } catch (e) {
