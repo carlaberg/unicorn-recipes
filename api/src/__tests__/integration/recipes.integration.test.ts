@@ -1,13 +1,14 @@
+import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
+    afterAll,
+    afterEach,
+    beforeAll,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
 } from "vitest";
 import { buildApp } from "../../app";
 
@@ -120,6 +121,41 @@ describe("Recipe API Integration Tests", () => {
       );
     });
 
+    it("merges duplicate ingredients with the same unit", async () => {
+      vi.mocked(db.recipe.create).mockResolvedValue(mockRecipe as any);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/me/recipes/create",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Duplicate ingredients",
+          image: "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+          instructions: "Mix.",
+          ingredients: [
+            { name: "Flour", amount: 2, unit: "dl" },
+            { name: " flour ", amount: 1, unit: "dl" },
+          ],
+        }),
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(vi.mocked(db.recipe.create)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ingredients: {
+              create: [
+                expect.objectContaining({
+                  amount: 3,
+                  unit: "dl",
+                }),
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
     it("capitalizes recipe title before create", async () => {
       vi.mocked(db.recipe.create).mockResolvedValue(mockRecipe as any);
       const payload = {
@@ -187,6 +223,47 @@ describe("Recipe API Integration Tests", () => {
               ],
             },
           }),
+        }),
+      );
+    });
+  });
+
+  describe("POST /me/recipes/import-url", () => {
+    it("extracts a Recipe JSON-LD block", async () => {
+      mswServer.use(
+        http.get("https://example.com/recipe", () =>
+          HttpResponse.html(`
+            <script type="application/ld+json">
+              {
+                "@context": "https://schema.org",
+                "@type": "Recipe",
+                "name": "Kladdkaka",
+                "recipeIngredient": ["2 dl mjöl", "100 g smör"],
+                "recipeInstructions": [{"@type":"HowToStep","text":"Blanda allt."}],
+                "image": "https://example.com/cake.jpg"
+              }
+            </script>
+          `),
+        ),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/me/recipes/import-url",
+        headers: { "x-user-id": "1", "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/recipe" }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body)).toEqual(
+        expect.objectContaining({
+          title: "Kladdkaka",
+          sourceUrl: "https://example.com/recipe",
+          imageUrl: "https://example.com/cake.jpg",
+          ingredients: [
+            { name: "mjöl", amount: 2, unit: "dl" },
+            { name: "smör", amount: 100, unit: "g" },
+          ],
         }),
       );
     });

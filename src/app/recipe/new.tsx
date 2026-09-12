@@ -6,16 +6,16 @@ import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useState } from "react";
 import {
-  Alert,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
+    Alert,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -24,15 +24,16 @@ import { ThemedView } from "@/components/themed-view";
 import { STRINGS } from "@/constants/strings";
 import { MaxContentWidth, Spacing } from "@/constants/theme";
 import {
-  Ingredient,
-  IngredientUnit,
-  ingredientUnits,
-  normalizeIngredientUnit,
+    Ingredient,
+    IngredientUnit,
+    ingredientUnits,
+    normalizeIngredientUnit,
 } from "@/data/mock-data";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
 
-type ImportSource = "upload" | "scan" | "text";
+type ImportSource = "upload" | "scan" | "text" | "url";
+type ImportModalMode = "text" | "url";
 
 function formatIngredientUnit(unit: string) {
   return unit.trim().toLowerCase() === "st" ? "" : ` ${unit}`;
@@ -53,10 +54,11 @@ export default function NewRecipeScreen() {
     ingredientUnits[0],
   );
   const [instructions, setInstructions] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeImport, setActiveImport] = useState<ImportSource | null>(null);
-  const [isTextImportModalVisible, setIsTextImportModalVisible] =
-    useState(false);
+  const [importModalMode, setImportModalMode] =
+    useState<ImportModalMode | null>(null);
   const [importText, setImportText] = useState("");
 
   const canAddIngredient =
@@ -166,13 +168,19 @@ export default function NewRecipeScreen() {
     try {
       setIsSubmitting(true);
 
-      const imageUrl = await uploadToCloudinary(image, "image");
-      uploadedAssetUrls.push(imageUrl);
+      const imageUrl = /^https?:\/\//i.test(image)
+        ? image
+        : await uploadToCloudinary(image, "image");
+      if (!/^https?:\/\//i.test(image)) {
+        uploadedAssetUrls.push(imageUrl);
+      }
 
       const videoUrl = video.trim()
-        ? await uploadToCloudinary(video, "video")
+        ? /^https?:\/\//i.test(video)
+          ? video
+          : await uploadToCloudinary(video, "video")
         : undefined;
-      if (videoUrl) {
+      if (videoUrl && !/^https?:\/\//i.test(video)) {
         uploadedAssetUrls.push(videoUrl);
       }
 
@@ -186,6 +194,7 @@ export default function NewRecipeScreen() {
           image: imageUrl,
           ...(videoUrl ? { video: videoUrl } : {}),
           instructions: instructions.trim(),
+          ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}),
           ingredients,
         }),
       });
@@ -227,6 +236,9 @@ export default function NewRecipeScreen() {
     title: string;
     instructions: string;
     ingredients: Ingredient[];
+    imageUrl?: string;
+    videoUrl?: string;
+    sourceUrl?: string;
   } | null {
     if (!value || typeof value !== "object") {
       return null;
@@ -236,6 +248,9 @@ export default function NewRecipeScreen() {
       title?: unknown;
       instructions?: unknown;
       ingredients?: unknown;
+      imageUrl?: unknown;
+      videoUrl?: unknown;
+      sourceUrl?: unknown;
     };
 
     if (
@@ -288,6 +303,18 @@ export default function NewRecipeScreen() {
       title: maybeRecipe.title.trim(),
       instructions: maybeRecipe.instructions.trim(),
       ingredients: parsedIngredients,
+      imageUrl:
+        typeof maybeRecipe.imageUrl === "string"
+          ? maybeRecipe.imageUrl
+          : undefined,
+      videoUrl:
+        typeof maybeRecipe.videoUrl === "string"
+          ? maybeRecipe.videoUrl
+          : undefined,
+      sourceUrl:
+        typeof maybeRecipe.sourceUrl === "string"
+          ? maybeRecipe.sourceUrl
+          : undefined,
     };
   }
 
@@ -417,6 +444,9 @@ export default function NewRecipeScreen() {
       setTitle(parsedRecipe.title);
       setInstructions(parsedRecipe.instructions);
       setIngredients(parsedRecipe.ingredients);
+      if (parsedRecipe.imageUrl) setImage(parsedRecipe.imageUrl);
+      if (parsedRecipe.videoUrl) setVideo(parsedRecipe.videoUrl);
+      if (parsedRecipe.sourceUrl) setSourceUrl(parsedRecipe.sourceUrl);
 
       return true;
     } catch (error) {
@@ -558,7 +588,7 @@ export default function NewRecipeScreen() {
   }
 
   function openCreateFromTextModal() {
-    setIsTextImportModalVisible(true);
+    setImportModalMode("text");
   }
 
   async function handleImportFromText() {
@@ -577,7 +607,66 @@ export default function NewRecipeScreen() {
     const wasImported = await importFromRawText(rawText, "text");
     if (wasImported) {
       setImportText("");
-      setIsTextImportModalVisible(false);
+      setImportModalMode(null);
+    }
+  }
+
+  function openImportFromUrlModal() {
+    setImportModalMode("url");
+  }
+
+  async function handleImportFromUrl() {
+    Keyboard.dismiss();
+    const url = importText.trim();
+    if (!url) {
+      Alert.alert(
+        STRINGS.recipeNew.urlRequiredTitle,
+        STRINGS.recipeNew.urlRequiredBody,
+      );
+      return;
+    }
+
+    if (isImporting) return;
+    const shouldReplace = await confirmReplaceExistingForm();
+    if (!shouldReplace) return;
+
+    try {
+      setActiveImport("url");
+      const response = await authorizedFetch(
+        "/me/recipes/import-url",
+        getToken,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url }),
+        },
+      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          parseApiErrorMessage(errorText, STRINGS.recipeNew.urlImportFailed),
+        );
+      }
+
+      const parsedRecipe = parseScanRecipeResponse(await response.json());
+      if (!parsedRecipe) throw new Error(STRINGS.recipeNew.importInvalidData);
+      setTitle(parsedRecipe.title);
+      setInstructions(parsedRecipe.instructions);
+      setIngredients(parsedRecipe.ingredients);
+      setImage(parsedRecipe.imageUrl ?? "");
+      setVideo(parsedRecipe.videoUrl ?? "");
+      setSourceUrl(parsedRecipe.sourceUrl ?? url);
+      setImportText("");
+      setImportModalMode(null);
+    } catch (error) {
+      Alert.alert(
+        STRINGS.recipeNew.urlImportFailed,
+        error instanceof Error
+          ? error.message
+          : STRINGS.recipeNew.urlImportFailed,
+      );
+    } finally {
+      setActiveImport(null);
     }
   }
 
@@ -714,6 +803,23 @@ export default function NewRecipeScreen() {
               >
                 <ThemedText type="smallBold">
                   {STRINGS.recipeNew.createFromText}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.imageButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    opacity: isImporting ? 0.7 : 1,
+                  },
+                ]}
+                onPress={openImportFromUrlModal}
+                disabled={isImporting}
+              >
+                <ThemedText type="smallBold">
+                  {activeImport === "url"
+                    ? STRINGS.recipeNew.urlImporting
+                    : STRINGS.recipeNew.importFromUrl}
                 </ThemedText>
               </Pressable>
             </ThemedView>
@@ -977,10 +1083,10 @@ export default function NewRecipeScreen() {
             </Pressable>
 
             <Modal
-              visible={isTextImportModalVisible}
+              visible={importModalMode !== null}
               animationType="slide"
               transparent
-              onRequestClose={() => setIsTextImportModalVisible(false)}
+              onRequestClose={() => setImportModalMode(null)}
             >
               <ThemedView
                 style={[
@@ -1008,10 +1114,14 @@ export default function NewRecipeScreen() {
                       ]}
                     >
                       <ThemedText type="smallBold">
-                        {STRINGS.recipeNew.modalTitle}
+                        {importModalMode === "url"
+                          ? STRINGS.recipeNew.urlModalTitle
+                          : STRINGS.recipeNew.modalTitle}
                       </ThemedText>
                       <ThemedText themeColor="textSecondary">
-                        {STRINGS.recipeNew.modalDescription}
+                        {importModalMode === "url"
+                          ? STRINGS.recipeNew.urlModalDescription
+                          : STRINGS.recipeNew.modalDescription}
                       </ThemedText>
                       <TextInput
                         style={[
@@ -1022,7 +1132,11 @@ export default function NewRecipeScreen() {
                             color: theme.text,
                           },
                         ]}
-                        placeholder={STRINGS.recipeNew.modalPlaceholder}
+                        placeholder={
+                          importModalMode === "url"
+                            ? STRINGS.recipeNew.urlModalPlaceholder
+                            : STRINGS.recipeNew.modalPlaceholder
+                        }
                         placeholderTextColor={theme.textSecondary}
                         value={importText}
                         onChangeText={setImportText}
@@ -1036,8 +1150,8 @@ export default function NewRecipeScreen() {
                             styles.modalButton,
                             { backgroundColor: theme.backgroundElement },
                           ]}
-                          onPress={() => setIsTextImportModalVisible(false)}
-                          disabled={activeImport === "text"}
+                          onPress={() => setImportModalMode(null)}
+                          disabled={activeImport !== null}
                         >
                           <ThemedText type="smallBold">
                             {STRINGS.recipeNew.modalCancel}
@@ -1053,13 +1167,21 @@ export default function NewRecipeScreen() {
                                   : "#FF8A00",
                             },
                           ]}
-                          onPress={handleImportFromText}
-                          disabled={activeImport === "text"}
+                          onPress={
+                            importModalMode === "url"
+                              ? handleImportFromUrl
+                              : handleImportFromText
+                          }
+                          disabled={activeImport !== null}
                         >
                           <ThemedText type="smallBold">
-                            {activeImport === "text"
-                              ? STRINGS.recipeNew.modalImporting
-                              : STRINGS.recipeNew.modalImport}
+                            {activeImport !== null
+                              ? importModalMode === "url"
+                                ? STRINGS.recipeNew.urlImporting
+                                : STRINGS.recipeNew.modalImporting
+                              : importModalMode === "url"
+                                ? STRINGS.recipeNew.importFromUrl
+                                : STRINGS.recipeNew.modalImport}
                           </ThemedText>
                         </Pressable>
                       </ThemedView>
