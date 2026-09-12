@@ -31,11 +31,53 @@ export function getPeriodStartUtc(date: Date, anchorDay: number) {
   return d;
 }
 
+export function mapTemplateDayOffsetToPeriod(
+  templateDayOffset: number,
+  periodStartDate: Date,
+) {
+  const mondayFirstStart =
+    (normalizeDateUtc(periodStartDate).getUTCDay() + 6) % 7;
+  return (templateDayOffset - mondayFirstStart + 7) % 7;
+}
+
+export function mapPeriodDayOffsetToTemplate(
+  periodDayOffset: number,
+  periodStartDate: Date,
+) {
+  const mondayFirstStart =
+    (normalizeDateUtc(periodStartDate).getUTCDay() + 6) % 7;
+  return (periodDayOffset + mondayFirstStart) % 7;
+}
+
 export function formatDateOnlyUtc(value: Date) {
   const year = value.getUTCFullYear();
   const month = String(value.getUTCMonth() + 1).padStart(2, "0");
   const day = String(value.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+export async function findOverlappingVisibleMenu(
+  userId: number,
+  startDate: Date,
+  excludeMenuId?: number,
+) {
+  const periodEnd = addDaysUtc(startDate, 6);
+  const periodStart = addDaysUtc(startDate, -6);
+
+  return db.weeklyMenu.findFirst({
+    where: {
+      userId,
+      isTemplate: false,
+      hiddenFromCalendar: false,
+      startDate: {
+        not: null,
+        lte: periodEnd,
+        gte: periodStart,
+      },
+      ...(excludeMenuId !== undefined ? { id: { not: excludeMenuId } } : {}),
+    },
+    select: { id: true, startDate: true },
+  });
 }
 
 export function getRotationWeekIndex(startDate: Date, targetDate: Date) {
@@ -170,6 +212,17 @@ export async function resolveWeekMenu(userId: number, targetDate: Date) {
     return null;
   }
 
+  const overlappingMenu = await findOverlappingVisibleMenu(
+    userId,
+    projection.periodStartDate,
+  );
+  if (
+    overlappingMenu &&
+    overlappingMenu.startDate?.getTime() !== projection.periodStartDate.getTime()
+  ) {
+    return null;
+  }
+
   const anyExisting = await db.weeklyMenu.findFirst({
     where: {
       userId,
@@ -231,7 +284,10 @@ export async function resolveWeekMenu(userId: number, targetDate: Date) {
     await db.menuEntry.createMany({
       data: template.templateMenu.menuEntries.map((entry) => ({
         weeklyMenuId: createdMenu.id,
-        dayOffset: entry.dayOffset,
+        dayOffset: mapTemplateDayOffsetToPeriod(
+          entry.dayOffset,
+          projection.periodStartDate,
+        ),
         mealType: entry.mealType,
         recipeId: entry.recipeId,
         note: entry.note,
@@ -314,14 +370,10 @@ export async function generateWeeksForRotation(
     const template = rotation.templates[weekIndex % rotation.templates.length];
     const targetStartDate = addDaysUtc(rotation.startDate, weekIndex * 7);
 
-    const existingMenu = await db.weeklyMenu.findFirst({
-      where: {
-        userId,
-        isTemplate: false,
-        startDate: targetStartDate,
-      },
-      select: { id: true },
-    });
+    const existingMenu = await findOverlappingVisibleMenu(
+      userId,
+      targetStartDate,
+    );
 
     if (existingMenu) {
       conflicts.push({
@@ -350,7 +402,10 @@ export async function generateWeeksForRotation(
       await db.menuEntry.createMany({
         data: template.templateMenu.menuEntries.map((entry) => ({
           weeklyMenuId: createdMenu.id,
-          dayOffset: entry.dayOffset,
+          dayOffset: mapTemplateDayOffsetToPeriod(
+            entry.dayOffset,
+            targetStartDate,
+          ),
           mealType: entry.mealType,
           recipeId: entry.recipeId,
           note: entry.note,

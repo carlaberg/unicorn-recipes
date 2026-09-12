@@ -5,8 +5,11 @@ import { getUserIdFromRequest } from "../utils/auth";
 import {
     addDaysUtc,
     formatDateOnlyUtc,
+    findOverlappingVisibleMenu,
     getActiveRotationForProjection,
     getPeriodStartUtc,
+    mapPeriodDayOffsetToTemplate,
+    mapTemplateDayOffsetToPeriod,
     projectRotationWeek,
     resolveWeekMenu,
 } from "../utils/rotation";
@@ -182,6 +185,7 @@ export async function menuRoutes(app: FastifyInstance) {
         parsed.data.startDate ? new Date(parsed.data.startDate) : new Date(),
       );
       const rangeEnd = addDaysUtc(rangeStart, (parsed.data.weeks - 1) * 7);
+      const menuQueryStart = addDaysUtc(rangeStart, -6);
 
       const [menus, activeRotation] = await Promise.all([
         db.weeklyMenu.findMany({
@@ -190,7 +194,7 @@ export async function menuRoutes(app: FastifyInstance) {
             isTemplate: false,
             hiddenFromCalendar: false,
             startDate: {
-              gte: rangeStart,
+              gte: menuQueryStart,
               lte: rangeEnd,
             },
           },
@@ -268,10 +272,39 @@ export async function menuRoutes(app: FastifyInstance) {
         };
       });
 
+      // Preserve manually planned menus whose start date is not aligned with
+      // the requested grid or an active rotation's anchor weekday.
+      const weekByStartDate = new Map(
+        weeks.map((week) => [week.startDate, week]),
+      );
+      menus.forEach((menu) => {
+        if (!menu.startDate) return;
+
+        const startDate = formatDateOnlyUtc(menu.startDate);
+        if (weekByStartDate.has(startDate)) return;
+
+        weekByStartDate.set(startDate, {
+          startDate,
+          status: "materialized" as const,
+          menuId: menu.id,
+          menuName: menu.name,
+          isRotation: menu.rotationId !== null,
+          isActiveRotation:
+            activeRotation !== null && menu.rotationId === activeRotation.id,
+          rotationId: menu.rotationId,
+          templateMenuId: null,
+          templateName: null,
+        });
+      });
+
+      const calendarWeeks = Array.from(weekByStartDate.values()).sort((a, b) =>
+        a.startDate.localeCompare(b.startDate),
+      );
+
       return reply.send({
         rangeStart: formatDateOnlyUtc(rangeStart),
         activeRotationId: activeRotation?.id ?? null,
-        weeks,
+        weeks: calendarWeeks,
       });
     },
   );
@@ -395,7 +428,9 @@ export async function menuRoutes(app: FastifyInstance) {
       }
 
       sourceEntries = sourceMenu.menuEntries.map((entry) => ({
-        dayOffset: entry.dayOffset,
+        dayOffset: sourceMenu.startDate
+          ? mapPeriodDayOffsetToTemplate(entry.dayOffset, sourceMenu.startDate)
+          : entry.dayOffset,
         mealType: entry.mealType,
         recipeId: entry.recipeId,
         note: entry.note,
@@ -528,13 +563,26 @@ export async function menuRoutes(app: FastifyInstance) {
 
     const { name, startDate, isTemplate, tags } = result.data;
 
+    const menuStartDate = startDate ? new Date(startDate) : null;
+    if (menuStartDate && !isTemplate) {
+      const overlappingMenu = await findOverlappingVisibleMenu(
+        userId,
+        menuStartDate,
+      );
+      if (overlappingMenu) {
+        return reply
+          .status(409)
+          .send({ message: "A visible menu already covers part of this week" });
+      }
+    }
+
     const menu = await db.weeklyMenu.create({
       data: {
         userId,
         name: name ?? null,
         isTemplate: isTemplate ?? false,
         tags: tags ?? [],
-        startDate: startDate ? new Date(startDate) : null,
+        startDate: menuStartDate,
       },
       include: {
         menuEntries: {
@@ -577,13 +625,24 @@ export async function menuRoutes(app: FastifyInstance) {
       return reply.notFound("Template menu not found");
     }
 
+    const menuStartDate = new Date(startDate);
+    const overlappingMenu = await findOverlappingVisibleMenu(
+      userId,
+      menuStartDate,
+    );
+    if (overlappingMenu) {
+      return reply
+        .status(409)
+        .send({ message: "A visible menu already covers part of this week" });
+    }
+
     const created = await db.weeklyMenu.create({
       data: {
         userId,
         name: name ?? template.name,
         isTemplate: false,
         tags: [],
-        startDate: new Date(startDate),
+        startDate: menuStartDate,
       },
     });
 
@@ -591,7 +650,7 @@ export async function menuRoutes(app: FastifyInstance) {
       await db.menuEntry.createMany({
         data: template.menuEntries.map((entry) => ({
           weeklyMenuId: created.id,
-          dayOffset: entry.dayOffset,
+          dayOffset: mapTemplateDayOffsetToPeriod(entry.dayOffset, menuStartDate),
           mealType: entry.mealType,
           recipeId: entry.recipeId,
           note: entry.note,
@@ -642,6 +701,27 @@ export async function menuRoutes(app: FastifyInstance) {
       }
 
       const { name, startDate, isTemplate, tags } = result.data;
+
+      const nextIsTemplate = isTemplate ?? existing.isTemplate;
+      const nextStartDate =
+        startDate === undefined
+          ? existing.startDate
+          : startDate
+            ? new Date(startDate)
+            : null;
+
+      if (!nextIsTemplate && nextStartDate && !existing.hiddenFromCalendar) {
+        const overlappingMenu = await findOverlappingVisibleMenu(
+          userId,
+          nextStartDate,
+          menuId,
+        );
+        if (overlappingMenu) {
+          return reply.status(409).send({
+            message: "A visible menu already covers part of this week",
+          });
+        }
+      }
 
       const updated = await db.weeklyMenu.update({
         where: { id: menuId },

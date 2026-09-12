@@ -17,6 +17,8 @@ export const STRINGS = {
   },
   recipes: {
     title: "Mina recept",
+    searchPlaceholder: "Sök recept",
+    noSearchResults: "Inga recept matchar sökningen",
     addRecipe: "+ Lägg till recept",
     empty: "Inga recept ännu. Lägg till ditt första!",
     fetchFailed: "Kunde inte hämta recept",
@@ -156,6 +158,8 @@ export const STRINGS = {
     creatingEmpty: "Skapar tom meny...",
     missingTemplate: "Välj en mall först",
     plannedPeriods: "Planerade perioder",
+    overlappingPeriod:
+      "Den valda veckan överlappar en redan planerad meny. Välj ett annat startdatum.",
     createFailed: "Kunde inte skapa plan",
     createEmptyFailed: "Kunde inte skapa tom meny",
   },
@@ -248,6 +252,8 @@ export const STRINGS = {
   },
   menuPick: {
     titlePrefix: "Välj recept",
+    searchPlaceholder: "Sök recept",
+    noSearchResults: "Inga recept matchar sökningen",
     back: "← Tillbaka",
     typeRecipe: "Recept",
     typeNote: "Anteckning",

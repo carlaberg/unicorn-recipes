@@ -18,7 +18,7 @@ import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { authorizedFetch } from "@/lib/api";
-import { formatDateParam } from "@/lib/date-utils";
+import { formatDateParam, parseDateParam } from "@/lib/date-utils";
 
 type WeeklyMenu = {
   id: number;
@@ -36,13 +36,22 @@ export default function MenuPlanScreen() {
   const insets = useSafeAreaInsets();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
-  const params = useLocalSearchParams<{ templateId?: string }>();
+  const params = useLocalSearchParams<{
+    templateId?: string;
+    startDate?: string;
+  }>();
 
   const [templates, setTemplates] = useState<WeeklyMenu[]>([]);
+  const [plannedMenus, setPlannedMenus] = useState<WeeklyMenu[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
     null,
   );
-  const [startDate, setStartDate] = useState(() => formatDateParam(new Date()));
+  const [startDate, setStartDate] = useState(() => {
+    const requestedStartDate = String(params.startDate ?? "");
+    return parseDateParam(requestedStartDate)
+      ? requestedStartDate
+      : formatDateParam(new Date());
+  });
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -66,20 +75,22 @@ export default function MenuPlanScreen() {
     setError(null);
 
     try {
-      const templateRes = await authorizedFetch(
-        "/me/menus/templates",
-        getTokenRef.current,
-      );
+      const [templateRes, plannedRes] = await Promise.all([
+        authorizedFetch("/me/menus/templates", getTokenRef.current),
+        authorizedFetch("/me/menus/planned", getTokenRef.current),
+      ]);
 
-      if (!templateRes.ok) {
+      if (!templateRes.ok || !plannedRes.ok) {
         throw new Error(
           `${STRINGS.menuPlan.createFailed} (${templateRes.status})`,
         );
       }
 
       const templateData = (await templateRes.json()) as WeeklyMenu[];
+      const plannedData = (await plannedRes.json()) as WeeklyMenu[];
 
       setTemplates(templateData);
+      setPlannedMenus(plannedData);
     } catch (e) {
       setError(e instanceof Error ? e.message : STRINGS.menuPlan.createFailed);
     } finally {
@@ -116,6 +127,9 @@ export default function MenuPlanScreen() {
       );
 
       if (!response.ok) {
+        if (response.status === 409) {
+          throw new Error(STRINGS.menuPlan.overlappingPeriod);
+        }
         throw new Error(
           `${STRINGS.menuPlan.createFailed} (${response.status})`,
         );
@@ -145,6 +159,9 @@ export default function MenuPlanScreen() {
       });
 
       if (!response.ok) {
+        if (response.status === 409) {
+          throw new Error(STRINGS.menuPlan.overlappingPeriod);
+        }
         throw new Error(
           `${STRINGS.menuPlan.createEmptyFailed} (${response.status})`,
         );
@@ -176,6 +193,25 @@ export default function MenuPlanScreen() {
     end.setDate(end.getDate() + 6);
     return formatDateParam(end);
   }
+
+  const selectedStartDate = parseDateParam(startDate);
+  const selectedEndDate = selectedStartDate
+    ? new Date(selectedStartDate)
+    : null;
+  selectedEndDate?.setDate(selectedEndDate.getDate() + 6);
+
+  const hasOverlappingMenu = plannedMenus.some((menu) => {
+    if (!selectedStartDate || !menu.startDate) return false;
+
+    const menuStartDate = parseDateParam(menu.startDate);
+    if (!menuStartDate || !selectedEndDate) return false;
+
+    const menuEndDate = new Date(menuStartDate);
+    menuEndDate.setDate(menuEndDate.getDate() + 6);
+    return (
+      menuStartDate <= selectedEndDate && menuEndDate >= selectedStartDate
+    );
+  });
 
   const selectedTemplate = templates.find(
     (template) => template.id === selectedTemplateId,
@@ -217,6 +253,18 @@ export default function MenuPlanScreen() {
               <ThemedText style={styles.rangeSummaryText}>
                 {formatRangeLabel(startDate, getEndDateString(startDate))}
               </ThemedText>
+              {hasOverlappingMenu ? (
+                <View
+                  style={[
+                    styles.overlapWarning,
+                    { backgroundColor: theme.backgroundElement },
+                  ]}
+                >
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {STRINGS.menuPlan.overlappingPeriod}
+                  </ThemedText>
+                </View>
+              ) : null}
               <Pressable
                 onPress={() => setIsDatePickerVisible(true)}
                 style={[
@@ -300,7 +348,11 @@ export default function MenuPlanScreen() {
                 </ThemedText>
               )}
               <Pressable
-                onPress={() => router.push("/menu/library")}
+                onPress={() =>
+                  router.push(
+                    `/menu/library?startDate=${encodeURIComponent(startDate)}` as any,
+                  )
+                }
                 style={[
                   styles.inlineButton,
                   { backgroundColor: theme.backgroundElement },
@@ -312,13 +364,14 @@ export default function MenuPlanScreen() {
 
             <Pressable
               onPress={handleSave}
-              disabled={isSaving}
+              disabled={isSaving || hasOverlappingMenu}
               style={[
                 styles.submitButton,
                 {
-                  backgroundColor: isSaving
+                  backgroundColor: isSaving || hasOverlappingMenu
                     ? theme.backgroundElement
                     : "#FF8A00",
+                  opacity: hasOverlappingMenu ? 0.7 : 1,
                 },
               ]}
             >
@@ -362,6 +415,10 @@ const styles = StyleSheet.create({
   },
   rangeSummaryText: {
     fontWeight: "600",
+  },
+  overlapWarning: {
+    borderRadius: 8,
+    padding: Spacing.two,
   },
   selectedTemplateRow: {
     flexDirection: "row",

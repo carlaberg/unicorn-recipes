@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/clerk-expo";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -60,6 +60,7 @@ export default function MenuLibraryScreen() {
   const insets = useSafeAreaInsets();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
+  const { startDate } = useLocalSearchParams<{ startDate?: string }>();
 
   const [templates, setTemplates] = useState<WeeklyMenu[]>([]);
   const [search, setSearch] = useState("");
@@ -321,7 +322,13 @@ export default function MenuLibraryScreen() {
                 <View style={styles.cardActions}>
                   <Pressable
                     onPress={() =>
-                      router.push(`/menu/plan?templateId=${template.id}` as any)
+                      router.push(
+                        `/menu/plan?templateId=${template.id}${
+                          typeof startDate === "string"
+                            ? `&startDate=${encodeURIComponent(startDate)}`
+                            : ""
+                        }` as any,
+                      )
                     }
                     style={styles.cardAction}
                   >

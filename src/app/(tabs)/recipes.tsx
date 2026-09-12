@@ -7,6 +7,7 @@ import {
     Image,
     Pressable,
     StyleSheet,
+    TextInput,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -64,6 +65,7 @@ export default function RecipesScreen() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
+  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,10 +121,17 @@ export default function RecipesScreen() {
     }, [isLoaded, isSignedIn]),
   );
 
+    const normalizedSearch = search.trim().toLocaleLowerCase("sv");
+    const filteredRecipes = normalizedSearch
+      ? recipes.filter((recipe) =>
+          recipe.name.toLocaleLowerCase("sv").includes(normalizedSearch),
+        )
+      : recipes;
+
   return (
     <ThemedView style={styles.container}>
       <FlatList
-        data={recipes}
+        data={filteredRecipes}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => <RecipeCard recipe={item} />}
         style={styles.list}
@@ -136,6 +145,16 @@ export default function RecipesScreen() {
         ListHeaderComponent={
           <ThemedView style={styles.header}>
             <ThemedText type="subtitle">{STRINGS.recipes.title}</ThemedText>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder={STRINGS.recipes.searchPlaceholder}
+              placeholderTextColor={theme.textSecondary}
+              style={[
+                styles.searchInput,
+                { borderColor: theme.backgroundElement, color: theme.text },
+              ]}
+            />
           </ThemedView>
         }
         ListEmptyComponent={
@@ -145,7 +164,9 @@ export default function RecipesScreen() {
             <ThemedText themeColor="textSecondary">{error}</ThemedText>
           ) : (
             <ThemedText themeColor="textSecondary">
-              {STRINGS.recipes.empty}
+              {normalizedSearch
+                ? STRINGS.recipes.noSearchResults
+                : STRINGS.recipes.empty}
             </ThemedText>
           )
         }
@@ -192,6 +213,12 @@ const styles = StyleSheet.create({
   header: {
     gap: Spacing.three,
     marginBottom: Spacing.four,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   fab: {
     position: "absolute",
