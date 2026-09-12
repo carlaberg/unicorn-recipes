@@ -4,8 +4,8 @@ import db from "../db";
 import { getUserIdFromRequest } from "../utils/auth";
 import {
     addDaysUtc,
-    formatDateOnlyUtc,
     findOverlappingVisibleMenu,
+    formatDateOnlyUtc,
     getActiveRotationForProjection,
     getPeriodStartUtc,
     mapPeriodDayOffsetToTemplate,
@@ -650,7 +650,10 @@ export async function menuRoutes(app: FastifyInstance) {
       await db.menuEntry.createMany({
         data: template.menuEntries.map((entry) => ({
           weeklyMenuId: created.id,
-          dayOffset: mapTemplateDayOffsetToPeriod(entry.dayOffset, menuStartDate),
+          dayOffset: mapTemplateDayOffsetToPeriod(
+            entry.dayOffset,
+            menuStartDate,
+          ),
           mealType: entry.mealType,
           recipeId: entry.recipeId,
           note: entry.note,

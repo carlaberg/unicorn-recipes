@@ -218,7 +218,8 @@ export async function resolveWeekMenu(userId: number, targetDate: Date) {
   );
   if (
     overlappingMenu &&
-    overlappingMenu.startDate?.getTime() !== projection.periodStartDate.getTime()
+    overlappingMenu.startDate?.getTime() !==
+      projection.periodStartDate.getTime()
   ) {
     return null;
   }

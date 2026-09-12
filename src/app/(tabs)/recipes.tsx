@@ -121,12 +121,12 @@ export default function RecipesScreen() {
     }, [isLoaded, isSignedIn]),
   );
 
-    const normalizedSearch = search.trim().toLocaleLowerCase("sv");
-    const filteredRecipes = normalizedSearch
-      ? recipes.filter((recipe) =>
-          recipe.name.toLocaleLowerCase("sv").includes(normalizedSearch),
-        )
-      : recipes;
+  const normalizedSearch = search.trim().toLocaleLowerCase("sv");
+  const filteredRecipes = normalizedSearch
+    ? recipes.filter((recipe) =>
+        recipe.name.toLocaleLowerCase("sv").includes(normalizedSearch),
+      )
+    : recipes;
 
   return (
     <ThemedView style={styles.container}>

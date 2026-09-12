@@ -208,9 +208,7 @@ export default function MenuPlanScreen() {
 
     const menuEndDate = new Date(menuStartDate);
     menuEndDate.setDate(menuEndDate.getDate() + 6);
-    return (
-      menuStartDate <= selectedEndDate && menuEndDate >= selectedStartDate
-    );
+    return menuStartDate <= selectedEndDate && menuEndDate >= selectedStartDate;
   });
 
   const selectedTemplate = templates.find(
@@ -368,9 +366,10 @@ export default function MenuPlanScreen() {
               style={[
                 styles.submitButton,
                 {
-                  backgroundColor: isSaving || hasOverlappingMenu
-                    ? theme.backgroundElement
-                    : "#FF8A00",
+                  backgroundColor:
+                    isSaving || hasOverlappingMenu
+                      ? theme.backgroundElement
+                      : "#FF8A00",
                   opacity: hasOverlappingMenu ? 0.7 : 1,
                 },
               ]}
