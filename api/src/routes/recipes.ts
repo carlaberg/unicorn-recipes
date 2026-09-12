@@ -5,11 +5,11 @@ import { config } from "../config";
 import db from "../db";
 import { getUserIdFromRequest } from "../utils/auth";
 import {
-  applyAmountMultiplier,
-  canonicalIngredientUnits,
-  getAllowedUnitList,
-  normalizeIngredientName,
-  normalizeIngredientUnit,
+    applyAmountMultiplier,
+    canonicalIngredientUnits,
+    getAllowedUnitList,
+    normalizeIngredientName,
+    normalizeIngredientUnit,
 } from "../utils/ingredient-units";
 
 const recipeIngredientInputSchema = z.object({
@@ -24,6 +24,7 @@ const createRecipeBodySchema = z
     title: z.string().trim().min(1).optional(),
     image: z.string().trim().url(),
     video: z.string().trim().url().optional(),
+    sourceUrl: z.string().trim().url().optional(),
     instructions: z.string().trim().min(1),
     ingredients: z.array(recipeIngredientInputSchema).default([]),
   })
@@ -68,6 +69,10 @@ const scanRecipeBodySchema = z.object({
   rawText: z.string().trim().min(1),
 });
 
+const importRecipeUrlBodySchema = z.object({
+  url: z.string().trim().url(),
+});
+
 const scanRecipeResponseSchema = z.object({
   title: z.string().trim().min(1),
   instructions: z.string().trim().min(1),
@@ -81,6 +86,21 @@ const scanRecipeResponseSchema = z.object({
 });
 
 type ScanRecipeBody = z.infer<typeof scanRecipeBodySchema>;
+
+const importedRecipeSchema = z.object({
+  title: z.string().trim().min(1),
+  instructions: z.string().trim().min(1),
+  ingredients: z.array(
+    z.object({
+      name: z.string().trim().min(1),
+      amount: z.coerce.number().positive(),
+      unit: z.enum(canonicalIngredientUnits),
+    }),
+  ),
+  imageUrl: z.string().url().optional(),
+  videoUrl: z.string().url().optional(),
+  sourceUrl: z.string().url(),
+});
 
 const proxyAssetQuerySchema = z.object({
   url: z.string().trim().url(),
@@ -171,6 +191,125 @@ function buildScanPrompt(rawText: string) {
     "OCR text:",
     rawText,
   ].join("\n");
+}
+
+function isBlockedRecipeImportHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+  );
+}
+
+function getRecipeJsonLdValues(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.flatMap(getRecipeJsonLdValues);
+  if (!value || typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  const values: unknown[] = [record];
+  if (Array.isArray(record["@graph"])) {
+    values.push(
+      ...(record["@graph"] as unknown[]).flatMap(getRecipeJsonLdValues),
+    );
+  }
+  return values;
+}
+
+function isRecipeJsonLd(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const type = (value as Record<string, unknown>)["@type"];
+  return type === "Recipe" || (Array.isArray(type) && type.includes("Recipe"));
+}
+
+function extractRecipeInstructions(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (!Array.isArray(value)) return "";
+
+  return value
+    .map((step) => {
+      if (typeof step === "string") return step.trim();
+      if (step && typeof step === "object") {
+        const text = (step as Record<string, unknown>).text;
+        return typeof text === "string" ? text.trim() : "";
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function parseImportedIngredient(value: unknown) {
+  if (typeof value !== "string") return null;
+
+  const text = value.trim();
+  const match = text.match(
+    /^([\d.,]+)\s*(kg|g|ml|cl|dl|l|msk|matsked|tbsp|tsk|tesked|tsp|krm|st|stycken|piece|pieces|pcs|nypa|pinch|pinches|cup|cups)?\s+(.+)$/i,
+  );
+  if (!match) return null;
+
+  const amount = Number(match[1].replace(",", "."));
+  const unit = normalizeIngredientUnit(match[2] ?? "st");
+  if (!Number.isFinite(amount) || !unit) return null;
+
+  return {
+    name: match[3].trim(),
+    amount: applyAmountMultiplier(amount, unit.multiplier),
+    unit: unit.unit,
+  };
+}
+
+function parseRecipeJsonLd(html: string, sourceUrl: string) {
+  const scripts = [
+    ...html.matchAll(
+      /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+    ),
+  ];
+  const recipe = scripts
+    .flatMap((match) => {
+      try {
+        return getRecipeJsonLdValues(JSON.parse(match[1]));
+      } catch {
+        return [];
+      }
+    })
+    .find(isRecipeJsonLd);
+
+  if (!recipe) return null;
+
+  const ingredients = Array.isArray(recipe.recipeIngredient)
+    ? recipe.recipeIngredient.map(parseImportedIngredient).filter(Boolean)
+    : [];
+  const instructions = extractRecipeInstructions(recipe.recipeInstructions);
+  const image = Array.isArray(recipe.image) ? recipe.image[0] : recipe.image;
+  const video =
+    typeof recipe.video === "string"
+      ? recipe.video
+      : recipe.video && typeof recipe.video === "object"
+        ? (recipe.video as Record<string, unknown>).contentUrl
+        : undefined;
+
+  const parsed = importedRecipeSchema.safeParse({
+    title: recipe.name,
+    instructions,
+    ingredients,
+    imageUrl:
+      typeof image === "string"
+        ? new URL(image, sourceUrl).toString()
+        : undefined,
+    videoUrl:
+      typeof video === "string"
+        ? new URL(video, sourceUrl).toString()
+        : undefined,
+    sourceUrl,
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 function getCloudinaryCleanupConfig() {
@@ -318,24 +457,13 @@ async function deleteCloudinaryAssetByUrl(url: string) {
   }
 }
 
-function isAllowedCloudinaryUrl(url: string) {
+function isAllowedRemoteAssetUrl(url: string) {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:") {
-      return false;
-    }
-
-    if (parsed.hostname !== "res.cloudinary.com") {
-      return false;
-    }
-
-    const pathnameParts = parsed.pathname.split("/").filter(Boolean);
-    if (pathnameParts.length < 4) {
-      return false;
-    }
-
-    // Expected: /<cloud-name>/image/upload/<asset>
-    return pathnameParts[1] === "image" && pathnameParts[2] === "upload";
+    return (
+      parsed.protocol === "https:" &&
+      !isBlockedRecipeImportHost(parsed.hostname)
+    );
   } catch {
     return false;
   }
@@ -371,11 +499,14 @@ async function fetchImageBuffer(url: string) {
 type IngredientInput = z.infer<typeof recipeIngredientInputSchema>;
 
 function normalizeRecipeIngredients(ingredients: IngredientInput[]) {
-  const normalized = [] as Array<{
-    name: string;
-    amount: number;
-    unit: (typeof canonicalIngredientUnits)[number];
-  }>;
+  const normalized = new Map<
+    string,
+    {
+      name: string;
+      amount: number;
+      unit: (typeof canonicalIngredientUnits)[number];
+    }
+  >();
 
   for (const ingredient of ingredients) {
     const normalizedUnit = normalizeIngredientUnit(ingredient.unit);
@@ -385,17 +516,27 @@ function normalizeRecipeIngredients(ingredients: IngredientInput[]) {
       } as const;
     }
 
-    normalized.push({
-      name: normalizeIngredientName(ingredient.name),
-      amount: applyAmountMultiplier(
-        ingredient.amount,
-        normalizedUnit.multiplier,
-      ),
+    const name = normalizeIngredientName(ingredient.name);
+    const amount = applyAmountMultiplier(
+      ingredient.amount,
+      normalizedUnit.multiplier,
+    );
+    const existing = normalized.get(name);
+
+    if (existing && existing.unit !== normalizedUnit.unit) {
+      return {
+        error: `Ingredient '${name}' uses multiple units (${existing.unit} and ${normalizedUnit.unit}). Combine it before saving.`,
+      } as const;
+    }
+
+    normalized.set(name, {
+      name,
+      amount: (existing?.amount ?? 0) + amount,
       unit: normalizedUnit.unit,
     });
   }
 
-  return { value: normalized } as const;
+  return { value: [...normalized.values()] };
 }
 
 function capitalizeRecipeTitle(title: string) {
@@ -439,6 +580,7 @@ export async function recipeRoutes(app: FastifyInstance) {
         title,
         image,
         video,
+        sourceUrl,
         instructions,
         ingredients = [],
       } = parsedBody.data;
@@ -455,6 +597,7 @@ export async function recipeRoutes(app: FastifyInstance) {
           name: capitalizeRecipeTitle((title ?? name) as string),
           image,
           video,
+          sourceUrl,
           instructions,
           user: { connect: { id: userId } },
           ingredients: {
@@ -474,6 +617,82 @@ export async function recipeRoutes(app: FastifyInstance) {
       });
 
       return reply.status(201).send(recipe);
+    },
+  );
+
+  // POST /me/recipes/import-url
+  app.post(
+    "/import-url",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      await getUserIdFromRequest(
+        request.headers as Record<string, string | string[] | undefined>,
+      );
+
+      const parsedBody = importRecipeUrlBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.status(400).send({ message: "Invalid recipe URL" });
+      }
+
+      const sourceUrl = parsedBody.data.url;
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(sourceUrl);
+      } catch {
+        return reply.status(400).send({ message: "Invalid recipe URL" });
+      }
+
+      if (
+        !["http:", "https:"].includes(parsedUrl.protocol) ||
+        isBlockedRecipeImportHost(parsedUrl.hostname)
+      ) {
+        return reply.status(400).send({ message: "Recipe URL is not allowed" });
+      }
+
+      try {
+        const response = await fetch(sourceUrl, {
+          redirect: "manual",
+          headers: { accept: "text/html,application/xhtml+xml" },
+          signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!response.ok) {
+          return reply
+            .status(502)
+            .send({ message: "Could not fetch recipe page" });
+        }
+
+        const contentType = response.headers.get("content-type") ?? "";
+        if (
+          !contentType.includes("text/html") &&
+          !contentType.includes("xhtml")
+        ) {
+          return reply
+            .status(422)
+            .send({ message: "Recipe URL is not an HTML page" });
+        }
+
+        const html = await response.text();
+        if (Buffer.byteLength(html, "utf8") > 2_000_000) {
+          return reply
+            .status(422)
+            .send({ message: "Recipe page is too large" });
+        }
+
+        const importedRecipe = parseRecipeJsonLd(html, sourceUrl);
+        if (!importedRecipe) {
+          return reply.status(422).send({
+            message:
+              "Could not find a complete Recipe JSON-LD block on this page",
+          });
+        }
+
+        return reply.send(importedRecipe);
+      } catch (error) {
+        request.log.warn({ error, sourceUrl }, "Recipe URL import failed");
+        return reply
+          .status(502)
+          .send({ message: "Could not fetch recipe page" });
+      }
     },
   );
 
@@ -652,9 +871,9 @@ export async function recipeRoutes(app: FastifyInstance) {
       }
 
       const { url } = parsedQuery.data;
-      if (!isAllowedCloudinaryUrl(url)) {
+      if (!isAllowedRemoteAssetUrl(url)) {
         return reply.status(400).send({
-          message: "Only Cloudinary image URLs for this project are supported",
+          message: "Only public HTTPS image URLs are supported",
         });
       }
 
