@@ -35,6 +35,16 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="notifications">
+        <NativeTabs.Trigger.Label>
+          {STRINGS.tabs.notifications}
+        </NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "bell", selected: "bell.fill" }}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="library">
         <NativeTabs.Trigger.Label>
           {STRINGS.tabs.menuLibrary}

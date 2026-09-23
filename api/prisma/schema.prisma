@@ -17,6 +17,12 @@ enum MealType {
   DINNER
 }
 
+enum NotificationDeliveryMethod {
+  CALENDAR
+  SMS
+  APP
+}
+
 model User {
   id           Int           @id @default(autoincrement())
   email        String        @unique
@@ -28,6 +34,7 @@ model User {
   weeklyMenus  WeeklyMenu[]
   shoppingChecks ShoppingCheck[]
   menuRotations MenuRotation[]
+  notifications Notification[]
 }
 
 model Recipe {
@@ -145,4 +152,20 @@ model ShoppingCheck {
   user          User      @relation(fields: [userId], references: [id])
 
   @@unique([weeklyMenuId, userId, ingredientKey])
+}
+
+model Notification {
+  id              Int                          @id @default(autoincrement())
+  userId          Int
+  date            DateTime                     @db.Date
+  time            String
+  message         String
+  repeatsWeekly   Boolean                      @default(false)
+  deliveryMethods NotificationDeliveryMethod[] @default([])
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  user            User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, date])
 }
