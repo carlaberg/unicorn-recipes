@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/clerk-expo";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 
 import {
   cancelAllScheduledAppNotifications,
