@@ -27,6 +27,9 @@ export default function AppTabs() {
           <TabTrigger name="menu" href="/menu" asChild>
             <TabButton>{STRINGS.tabs.menu}</TabButton>
           </TabTrigger>
+          <TabTrigger name="notifications" href="/notifications" asChild>
+            <TabButton>{STRINGS.tabs.notifications}</TabButton>
+          </TabTrigger>
           <TabTrigger name="library" href="/library" asChild>
             <TabButton>{STRINGS.tabs.menuLibrary}</TabButton>
           </TabTrigger>
