@@ -7,6 +7,7 @@ import {
   NotificationFormScreen,
   NotificationFormValues,
 } from "@/components/notification-form-screen";
+import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { STRINGS } from "@/constants/strings";
 import { useTheme } from "@/hooks/use-theme";
@@ -25,14 +26,14 @@ export default function EditNotificationScreen() {
 
   const [notification, setNotification] = useState<ApiNotification | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadNotification() {
       if (!notificationId) {
-        setError(STRINGS.notifications.loadFailed);
+        setErrorMessage(STRINGS.notifications.loadFailed);
         setIsLoading(false);
         return;
       }
@@ -53,7 +54,7 @@ export default function EditNotificationScreen() {
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(
+          setErrorMessage(
             loadError instanceof Error
               ? loadError.message
               : STRINGS.notifications.loadFailed,
@@ -144,7 +145,13 @@ export default function EditNotificationScreen() {
   }
 
   if (!notification) {
-    return <ThemedView style={styles.centered} />;
+    return (
+      <ThemedView style={styles.centered}>
+        {errorMessage ? (
+          <ThemedText themeColor="textSecondary">{errorMessage}</ThemedText>
+        ) : null}
+      </ThemedView>
+    );
   }
 
   return (

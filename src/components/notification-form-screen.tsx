@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -43,10 +43,10 @@ type NotificationFormScreenProps = {
 
 const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-const deliveryMethodOptions: Array<{
+const deliveryMethodOptions: {
   value: NotificationDeliveryMethod;
   label: string;
-}> = [
+}[] = [
   { value: "APP", label: STRINGS.notifications.methodApp },
   { value: "SMS", label: STRINGS.notifications.methodSms },
   { value: "CALENDAR", label: STRINGS.notifications.methodCalendar },
@@ -75,8 +75,6 @@ export function NotificationFormScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const selectedDate = useMemo(() => parseDateParam(date), [date]);
 
   function toggleDeliveryMethod(method: NotificationDeliveryMethod) {
     setDeliveryMethods((current) =>
