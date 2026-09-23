@@ -15,7 +15,8 @@ import { authorizedFetch } from "@/lib/api";
 import {
   ApiNotification,
   cancelScheduledAppNotification,
-  syncScheduledAppNotification,
+  getCurrentNotificationTimeZone,
+  syncAppNotificationDelivery,
 } from "@/lib/notifications";
 
 export default function EditNotificationScreen() {
@@ -87,7 +88,10 @@ export default function EditNotificationScreen() {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify(values),
+          body: JSON.stringify({
+            ...values,
+            timeZone: getCurrentNotificationTimeZone(),
+          }),
         },
       );
 
@@ -96,7 +100,7 @@ export default function EditNotificationScreen() {
       }
 
       const payload = (await response.json()) as ApiNotification;
-      const scheduleResult = await syncScheduledAppNotification(payload);
+      const scheduleResult = await syncAppNotificationDelivery(payload, getToken);
       if (scheduleResult.error) {
         Alert.alert(STRINGS.notifications.title, scheduleResult.error);
       }

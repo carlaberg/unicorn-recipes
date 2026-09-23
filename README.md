@@ -41,6 +41,7 @@ Copy `api/.env.example` and fill in:
 - `CLERK_SECRET_KEY`
 - `CLERK_WEBHOOK_SIGNING_SECRET`
 - `GEMINI_API_KEY` (required for recipe scan endpoint)
+- `NOTIFICATION_DISPATCH_SECRET` (required to trigger remote push dispatch endpoint)
 
 The webhook signing secret must match the secret shown in Clerk for your webhook endpoint.
 
@@ -147,6 +148,13 @@ API tests:
 ```bash
 cd api
 npm test
+
+Remote push dispatch (run from a scheduler in production):
+
+```bash
+curl -X POST http://localhost:3000/internal/notifications/dispatch-due \
+  -H "x-notification-dispatch-secret: $NOTIFICATION_DISPATCH_SECRET"
+```
 ```
 
 ## Additional Docs

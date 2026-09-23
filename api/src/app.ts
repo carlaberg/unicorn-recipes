@@ -1,7 +1,10 @@
 import sensible from "@fastify/sensible";
 import Fastify, { FastifyInstance } from "fastify";
 import { menuRoutes } from "./routes/menu";
-import { notificationRoutes } from "./routes/notifications";
+import {
+  internalNotificationRoutes,
+  notificationRoutes,
+} from "./routes/notifications";
 import { recipeRoutes } from "./routes/recipes";
 import { rotationRoutes } from "./routes/rotations";
 import { shoppingRoutes } from "./routes/shopping";
@@ -26,6 +29,7 @@ export function buildApp(): FastifyInstance {
   app.register(userRoutes, { prefix: "/users" });
   app.register(recipeRoutes, { prefix: "/me/recipes" });
   app.register(notificationRoutes, { prefix: "/me/notifications" });
+  app.register(internalNotificationRoutes, { prefix: "/internal/notifications" });
   app.register(menuRoutes, { prefix: "/me/menus" });
   app.register(rotationRoutes, { prefix: "/me/menus/rotations" });
   app.register(shoppingRoutes, { prefix: "/me/menus" });

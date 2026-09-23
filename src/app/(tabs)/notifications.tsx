@@ -113,7 +113,7 @@ function NotificationCard({ notification }: { notification: ApiNotification }) {
 
         {notification.deliveryMethods.includes("APP") ? (
           <ThemedText type="small" themeColor="textSecondary">
-            {STRINGS.notifications.scheduledInApp}
+            {STRINGS.notifications.remotePushActive}
           </ThemedText>
         ) : null}
       </ThemedView>

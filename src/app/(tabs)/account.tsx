@@ -8,13 +8,15 @@ import { ThemedView } from "@/components/themed-view";
 import { STRINGS } from "@/constants/strings";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
+import { unregisterRemotePushToken } from "@/lib/notifications";
 
 export default function AccountScreen() {
   const theme = useTheme();
-  const { signOut } = useAuth();
+  const { getToken, signOut } = useAuth();
   const { user } = useUser();
 
   async function handleSignOut() {
+    await unregisterRemotePushToken(getToken);
     await signOut();
   }
 

@@ -10,7 +10,11 @@ import {
 import { STRINGS } from "@/constants/strings";
 import { authorizedFetch } from "@/lib/api";
 import { formatDateParam } from "@/lib/date-utils";
-import { ApiNotification, syncScheduledAppNotification } from "@/lib/notifications";
+import {
+  ApiNotification,
+  getCurrentNotificationTimeZone,
+  syncAppNotificationDelivery,
+} from "@/lib/notifications";
 
 function getDefaultTime() {
   const date = new Date();
@@ -30,7 +34,10 @@ export default function NewNotificationScreen() {
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          timeZone: getCurrentNotificationTimeZone(),
+        }),
       });
 
       if (!response.ok) {
@@ -38,7 +45,10 @@ export default function NewNotificationScreen() {
       }
 
       const notification = (await response.json()) as ApiNotification;
-      const scheduleResult = await syncScheduledAppNotification(notification);
+      const scheduleResult = await syncAppNotificationDelivery(
+        notification,
+        getToken,
+      );
       if (scheduleResult.error) {
         Alert.alert(STRINGS.notifications.title, scheduleResult.error);
       }

@@ -56,10 +56,14 @@ export const STRINGS = {
     openCalendar: "Lägg till i kalender",
     openSms: "Öppna SMS",
     scheduledInApp: "Appnotis schemalagd",
+    remotePushActive: "Pushnotiser aktiva",
     appScheduleUnavailable:
       "Appnotiser kan bara schemaläggas på iOS och Android.",
     appPermissionDenied: "Tillåt notiser för att schemalägga apppåminnelser.",
     appSchedulePast: "Tidpunkten har redan passerat.",
+    pushSetupMissing:
+      "Pushnotiser saknar projektkonfiguration. Faller tillbaka till lokal appnotis.",
+    pushRegisterFailed: "Kunde inte aktivera pushnotiser",
     calendarFailed: "Kunde inte öppna kalendern",
     smsFailed: "Kunde inte öppna SMS",
     formHint: "Datum anger första utskicket.",

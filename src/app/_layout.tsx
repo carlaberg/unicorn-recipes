@@ -10,6 +10,7 @@ import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
+import { PushNotificationBootstrap } from "@/components/push-notification-bootstrap";
 import { tokenCache } from "@/lib/clerk-token-cache";
 
 export default function RootLayout() {
@@ -26,6 +27,7 @@ export default function RootLayout() {
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
+          <PushNotificationBootstrap />
           <AnimatedSplashOverlay />
           <Stack screenOptions={{ headerShown: false }} />
         </ThemeProvider>

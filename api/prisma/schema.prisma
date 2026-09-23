@@ -35,6 +35,7 @@ model User {
   shoppingChecks ShoppingCheck[]
   menuRotations MenuRotation[]
   notifications Notification[]
+  pushDevices   PushDevice[]
 }
 
 model Recipe {
@@ -159,13 +160,27 @@ model Notification {
   userId          Int
   date            DateTime                     @db.Date
   time            String
+  timeZone        String                       @default("UTC")
   message         String
   repeatsWeekly   Boolean                      @default(false)
   deliveryMethods NotificationDeliveryMethod[] @default([])
+  appPushLastSentAt DateTime?
   createdAt       DateTime                     @default(now())
   updatedAt       DateTime                     @updatedAt
   user            User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, date])
+}
+
+model PushDevice {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  expoPushToken String   @unique
+  platform      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
